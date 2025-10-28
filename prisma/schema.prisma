@@ -5,11 +5,191 @@
 // Try Prisma Accelerate: https://pris.ly/cli/accelerate-init
 
 generator client {
-  provider = "prisma-client"
-  output   = "../lib/generated/prisma"
+  provider = "prisma-client-js"
+  output   = "../node_modules/.prisma/client"
 }
 
 datasource db {
-  provider = "postgresql"
-  url      = env("DATABASE_URL")
+  provider  = "postgresql"
+  url = env("DIRECT_URL")
+}
+
+// ============================================
+// USER MANAGEMENT
+// ============================================
+
+model User {
+  id              String    @id @default(uuid())
+  supabaseId      String    @unique // Supabase Auth user ID
+  email           String    @unique
+  firstName       String?
+  lastName        String?
+  kycStatus       KycStatus @default(PENDING)
+  kycProviderId   String?   // Stripe Identity verification ID
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+
+  accounts        Account[]
+  transactions    Transaction[]
+  externalAccounts ExternalAccount[]
+
+  @@index([supabaseId])
+  @@index([email])
+}
+
+enum KycStatus {
+  PENDING
+  VERIFIED
+  REJECTED
+  REQUIRES_REVIEW
+}
+
+// ============================================
+// INTERNAL NEOBANK ACCOUNTS
+// ============================================
+
+model Account {
+  id              String        @id @default(uuid())
+  userId          String
+  accountType     AccountType   @default(CHECKING)
+  accountNumber   String        @unique
+  routingNumber   String        @default("021000021") // Mock routing number
+  balance         Decimal       @default(0.00) @db.Decimal(19, 4)
+  currency        String        @default("USD")
+  status          AccountStatus @default(ACTIVE)
+  stripeAccountId String?       // Stripe Treasury account ID (future)
+  createdAt       DateTime      @default(now())
+  updatedAt       DateTime      @updatedAt
+
+  user            User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  ledgerEntries   LedgerEntry[]
+  transactionsFrom Transaction[] @relation("FromAccount")
+  transactionsTo   Transaction[] @relation("ToAccount")
+
+  @@index([userId])
+  @@index([accountNumber])
+}
+
+enum AccountType {
+  CHECKING
+  SAVINGS
+}
+
+enum AccountStatus {
+  ACTIVE
+  FROZEN
+  CLOSED
+}
+
+// ============================================
+// EXTERNAL BANK ACCOUNTS (PLAID)
+// ============================================
+
+model ExternalAccount {
+  id                  String   @id @default(uuid())
+  userId              String
+  plaidAccountId      String   @unique
+  plaidItemId         String
+  plaidAccessToken    String   // Encrypted in production
+  institutionId       String
+  institutionName     String
+  accountName         String?
+  officialName        String?
+  mask                String   // Last 4 digits
+  type                String   // checking, savings, etc.
+  subtype             String?
+  availableBalance    Decimal? @db.Decimal(19, 4)
+  currentBalance      Decimal? @db.Decimal(19, 4)
+  currency            String   @default("USD")
+  verificationStatus  VerificationStatus @default(PENDING)
+  lastSynced          DateTime @default(now())
+  createdAt           DateTime @default(now())
+  updatedAt           DateTime @updatedAt
+
+  user                User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([plaidItemId])
+}
+
+enum VerificationStatus {
+  PENDING
+  VERIFIED
+  FAILED
+}
+
+// ============================================
+// TRANSACTIONS
+// ============================================
+
+model Transaction {
+  id                String            @id @default(uuid())
+  userId            String
+  fromAccountId     String?
+  toAccountId       String?
+  amount            Decimal           @db.Decimal(19, 4)
+  currency          String            @default("USD")
+  type              TransactionType
+  status            TransactionStatus @default(PENDING)
+  description       String?
+  metadata          Json?             // Stripe/Plaid metadata
+  idempotencyKey    String            @unique
+  externalId        String?           // Stripe/Plaid transaction ID
+  createdAt         DateTime          @default(now())
+  updatedAt         DateTime          @updatedAt
+
+  user              User              @relation(fields: [userId], references: [id], onDelete: Cascade)
+  fromAccount       Account?          @relation("FromAccount", fields: [fromAccountId], references: [id])
+  toAccount         Account?          @relation("ToAccount", fields: [toAccountId], references: [id])
+  ledgerEntries     LedgerEntry[]
+
+  @@index([userId, createdAt])
+  @@index([status])
+  @@index([idempotencyKey])
+}
+
+enum TransactionType {
+  P2P_TRANSFER
+  ACH_DEBIT
+  ACH_CREDIT
+  CARD_AUTHORIZATION
+  CARD_CAPTURE
+  REFUND
+  FEE
+  DEPOSIT
+  WITHDRAWAL
+}
+
+enum TransactionStatus {
+  PENDING
+  PROCESSING
+  COMPLETED
+  FAILED
+  CANCELLED
+}
+
+// ============================================
+// DOUBLE-ENTRY LEDGER
+// ============================================
+
+model LedgerEntry {
+  id              String          @id @default(uuid())
+  accountId       String
+  transactionId   String
+  entryType       EntryType
+  amount          Decimal         @db.Decimal(19, 4)
+  balanceAfter    Decimal         @db.Decimal(19, 4)
+  description     String
+  createdAt       DateTime        @default(now())
+
+  account         Account         @relation(fields: [accountId], references: [id], onDelete: Cascade)
+  transaction     Transaction     @relation(fields: [transactionId], references: [id], onDelete: Cascade)
+
+  @@index([accountId, createdAt])
+  @@index([transactionId])
+}
+
+enum EntryType {
+  DEBIT
+  CREDIT
 }

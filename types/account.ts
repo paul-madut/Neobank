@@ -106,3 +106,38 @@ export interface GetAccountsResponse {
   internalAccount: InternalAccount | null
   externalAccounts: ExternalAccount[]
 }
+
+export interface LedgerEntry {
+  id: string
+  accountId: string
+  transactionId: string
+  entryType: "DEBIT" | "CREDIT"
+  amount: string | number
+  balanceAfter: string | number
+  description: string
+  createdAt: Date | string
+}
+
+export interface TransactionWithDetails extends Transaction {
+  fromAccount?: {
+    id: string
+    accountNumber: string
+    accountType: string
+  } | null
+  toAccount?: {
+    id: string
+    accountNumber: string
+    accountType: string
+  } | null
+  ledgerEntries?: LedgerEntry[]
+}
+
+export interface GetTransactionsResponse {
+  transactions: TransactionWithDetails[]
+  pagination: {
+    total: number
+    limit: number
+    offset: number
+    hasMore: boolean
+  }
+}

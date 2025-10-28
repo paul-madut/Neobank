@@ -1,6 +1,7 @@
 "use client"
 
 import { InternalAccountCard } from "@/components/accounts/internal-account-card"
+import { TransactionList } from "@/components/transactions/transaction-list"
 import { Button } from "@/components/ui/button"
 import { ExternalLink, ArrowRight } from "lucide-react"
 import Link from "next/link"
@@ -88,7 +89,7 @@ export function DashboardClient({ account, userEmail }: DashboardClientProps) {
               <h3 className="font-semibold text-zinc-900 dark:text-white mb-4">
                 This Month
               </h3>
-              <div className="space-y-3">
+              <div className="flex justify-between">
                 <div>
                   <p className="text-xs text-zinc-500 dark:text-zinc-400">
                     Transactions
@@ -112,17 +113,18 @@ export function DashboardClient({ account, userEmail }: DashboardClientProps) {
 
         {/* Recent Activity */}
         <div className="mt-6 rounded-lg border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 p-8">
-          <h2 className="text-xl font-semibold text-zinc-900 dark:text-white mb-4">
-            Recent Activity
-          </h2>
-          <div className="text-center py-12">
-            <p className="text-zinc-600 dark:text-zinc-400 mb-4">
-              No recent activity
-            </p>
-            <p className="text-sm text-zinc-500 dark:text-zinc-500">
-              Your transactions will appear here
-            </p>
+          <div className="flex items-center justify-between mb-6">
+            <h2 className="text-xl font-semibold text-zinc-900 dark:text-white">
+              Recent Activity
+            </h2>
+            <Link href="/account">
+              <Button variant="ghost" size="sm">
+                View All
+                <ArrowRight className="w-4 h-4 ml-2" />
+              </Button>
+            </Link>
           </div>
+          <TransactionList limit={8} />
         </div>
       </div>
     </div>

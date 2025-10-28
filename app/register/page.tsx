@@ -54,6 +54,19 @@ export default function RegisterPage() {
         if (data.user.identities?.length === 0) {
           setError("An account with this email already exists")
         } else {
+          // Create user and internal account
+          try {
+            const onboardResponse = await fetch("/api/auth/onboard", {
+              method: "POST",
+            })
+
+            if (!onboardResponse.ok) {
+              console.error("Failed to onboard user")
+            }
+          } catch (err) {
+            console.error("Error during onboarding:", err)
+          }
+
           router.push("/login?message=Check your email to confirm your account")
         }
       }

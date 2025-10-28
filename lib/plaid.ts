@@ -1,7 +1,22 @@
 import { Configuration, PlaidApi, PlaidEnvironments } from 'plaid'
 
+// Determine Plaid environment from PLAID_ENV (sandbox, development, or production)
+const getPlaidEnvironment = () => {
+  const env = process.env.PLAID_ENV?.toLowerCase()
+
+  switch (env) {
+    case 'production':
+      return PlaidEnvironments.production
+    case 'development':
+      return PlaidEnvironments.development
+    case 'sandbox':
+    default:
+      return PlaidEnvironments.sandbox
+  }
+}
+
 const configuration = new Configuration({
-  basePath: PlaidEnvironments.sandbox, // Change to production when ready
+  basePath: getPlaidEnvironment(),
   baseOptions: {
     headers: {
       'PLAID-CLIENT-ID': process.env.PLAID_CLIENT_ID!,

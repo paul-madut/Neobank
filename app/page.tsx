@@ -2,11 +2,16 @@ import { AnimatedGridPattern } from "@/components/magicui/animated-grid-pattern"
 import { Meteors } from "@/components/magicui/meteors";
 import { ShimmerButton } from "@/components/magicui/shimmer-button";
 import { SparklesText } from "@/components/magicui/sparkles-text";
+import { FloatingNavbar } from "@/components/navbar/floating-navbar";
 import { ArrowRight, CreditCard, Lock, Smartphone, TrendingUp } from "lucide-react";
+import Link from "next/link";
 
 export default function Home() {
   return (
     <main className="relative min-h-screen overflow-hidden bg-gradient-to-b from-slate-950 via-slate-900 to-slate-950">
+      {/* Floating Navbar */}
+      <FloatingNavbar />
+
       {/* Animated Background */}
       <AnimatedGridPattern
         numSquares={30}
@@ -16,7 +21,7 @@ export default function Home() {
       />
 
       {/* Hero Section */}
-      <section className="relative z-10 flex min-h-screen flex-col items-center justify-center px-4 py-20">
+      <section id="hero" className="relative z-10 flex min-h-screen flex-col items-center justify-center px-4 py-20">
         <Meteors number={20} />
 
         <div className="mx-auto max-w-5xl text-center">
@@ -41,18 +46,22 @@ export default function Home() {
           </p>
 
           <div className="flex flex-col items-center justify-center gap-4 sm:flex-row">
-            <ShimmerButton
-              className="text-base font-semibold shadow-lg"
-              background="linear-gradient(135deg, #667eea 0%, #764ba2 100%)"
-            >
-              Get Started
-              <ArrowRight className="h-5 w-5" />
-            </ShimmerButton>
+            <Link href="/register">
+              <ShimmerButton
+                className="text-base font-semibold shadow-lg"
+                background="linear-gradient(135deg, #667eea 0%, #764ba2 100%)"
+              >
+                Get Started
+                <ArrowRight className="h-5 w-5" />
+              </ShimmerButton>
+            </Link>
 
-            <button className="group inline-flex items-center gap-2 rounded-full border border-slate-700 bg-transparent px-6 py-3 text-base font-semibold text-white transition-all hover:border-slate-500 hover:bg-slate-800/50">
-              Learn More
-              <ArrowRight className="h-5 w-5 transition-transform group-hover:translate-x-1" />
-            </button>
+            <a href="#features">
+              <button className="group inline-flex items-center gap-2 rounded-full border border-slate-700 bg-transparent px-6 py-3 text-base font-semibold text-white transition-all hover:border-slate-500 hover:bg-slate-800/50">
+                Learn More
+                <ArrowRight className="h-5 w-5 transition-transform group-hover:translate-x-1" />
+              </button>
+            </a>
           </div>
 
           {/* Stats */}
@@ -72,7 +81,7 @@ export default function Home() {
       </section>
 
       {/* Features Section */}
-      <section className="relative z-10 px-4 py-20">
+      <section id="features" className="relative z-10 px-4 py-20">
         <div className="mx-auto max-w-6xl">
           <div className="mb-16 text-center">
             <h2 className="mb-4 text-4xl font-bold text-white sm:text-5xl">
@@ -132,13 +141,15 @@ export default function Home() {
           <p className="mb-8 text-lg text-slate-300">
             Join thousands of users who are already experiencing the future of finance
           </p>
-          <ShimmerButton
-            className="text-lg font-semibold"
-            background="linear-gradient(135deg, #667eea 0%, #764ba2 100%)"
-          >
-            Open Your Account
-            <ArrowRight className="h-5 w-5" />
-          </ShimmerButton>
+          <Link href="/register">
+            <ShimmerButton
+              className="text-lg font-semibold"
+              background="linear-gradient(135deg, #667eea 0%, #764ba2 100%)"
+            >
+              Open Your Account
+              <ArrowRight className="h-5 w-5" />
+            </ShimmerButton>
+          </Link>
         </div>
       </section>
 

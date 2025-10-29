@@ -1,17 +1,21 @@
 "use client"
 
 import { useEffect, useState } from "react"
-import { redirect } from "next/navigation"
+import { useRouter } from "next/navigation"
 import { PlaidLinkButton } from "@/components/plaid/plaid-link-button"
 import { ExternalAccountsList } from "@/components/accounts/external-accounts-list"
-import { ArrowLeft, Plus } from "lucide-react"
+import { ArrowLeft, Plus, ShieldAlert } from "lucide-react"
 import Link from "next/link"
+import { Button } from "@/components/ui/button"
+import { toast } from "sonner"
 import type { ExternalAccount } from "@/types/account"
 
 export default function BanksPage() {
+  const router = useRouter()
   const [accounts, setAccounts] = useState<ExternalAccount[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
+  const [kycStatus, setKycStatus] = useState<string | null>(null)
 
   const fetchAccounts = async (refresh = false) => {
     try {
@@ -36,9 +40,29 @@ export default function BanksPage() {
     }
   }
 
+  const fetchKYCStatus = async () => {
+    try {
+      const response = await fetch("/api/kyc/status")
+      if (response.ok) {
+        const data = await response.json()
+        setKycStatus(data.kycStatus)
+      }
+    } catch (err) {
+      console.error("Error fetching KYC status:", err)
+    }
+  }
+
   useEffect(() => {
     fetchAccounts()
+    fetchKYCStatus()
   }, [])
+
+  const handleConnectClick = () => {
+    if (kycStatus !== "VERIFIED") {
+      toast.error("KYC verification required to connect banks")
+      router.push("/kyc")
+    }
+  }
 
   const handleLinkSuccess = () => {
     // Refresh accounts after successful link
@@ -68,13 +92,23 @@ export default function BanksPage() {
               </p>
             </div>
 
-            <PlaidLinkButton
-              onSuccess={handleLinkSuccess}
-              className="bg-zinc-900 hover:bg-zinc-800 dark:bg-white dark:hover:bg-zinc-100 text-white dark:text-zinc-900"
-            >
-              <Plus className="w-4 h-4 mr-2" />
-              Connect Bank
-            </PlaidLinkButton>
+            {kycStatus === "VERIFIED" ? (
+              <PlaidLinkButton
+                onSuccess={handleLinkSuccess}
+                className="bg-zinc-900 hover:bg-zinc-800 dark:bg-white dark:hover:bg-zinc-100 text-white dark:text-zinc-900"
+              >
+                <Plus className="w-4 h-4 mr-2" />
+                Connect Bank
+              </PlaidLinkButton>
+            ) : (
+              <Button
+                onClick={handleConnectClick}
+                className="bg-zinc-900 hover:bg-zinc-800 dark:bg-white dark:hover:bg-zinc-100 text-white dark:text-zinc-900"
+              >
+                <ShieldAlert className="w-4 h-4 mr-2" />
+                Connect Bank
+              </Button>
+            )}
           </div>
         </div>
 

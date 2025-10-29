@@ -51,7 +51,6 @@ export function ExternalAccountsList({
         {onRefresh && (
           <Button
             variant="outline"
-            size="sm"
             onClick={handleRefresh}
             disabled={refreshing}
             className="flex items-center gap-2"

@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase-server'
+import { prisma } from '@/lib/prisma'
 import { createLinkToken } from '@/lib/plaid-utils'
 import type { CreateLinkTokenResponse } from '@/types/account'
 
@@ -15,6 +16,19 @@ export async function POST(request: Request) {
       return NextResponse.json(
         { error: 'Unauthorized' },
         { status: 401 }
+      )
+    }
+
+    // Check KYC status
+    const dbUser = await prisma.user.findUnique({
+      where: { supabaseId: user.id },
+      select: { kycStatus: true },
+    })
+
+    if (!dbUser || dbUser.kycStatus !== 'VERIFIED') {
+      return NextResponse.json(
+        { error: 'KYC verification required', code: 'KYC_REQUIRED' },
+        { status: 403 }
       )
     }
 

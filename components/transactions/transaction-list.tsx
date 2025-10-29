@@ -87,7 +87,6 @@ export function TransactionList({
         <Button
           variant="outline"
           onClick={() => fetchTransactions(0)}
-          size="sm"
         >
           Try again
         </Button>

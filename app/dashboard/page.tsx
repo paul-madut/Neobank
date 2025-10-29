@@ -14,8 +14,10 @@ export default async function DashboardPage() {
     redirect("/login")
   }
 
-  // Fetch user's internal account
+  // Fetch user's internal account and KYC status
   let account = null
+  let kycStatus: "PENDING" | "VERIFIED" | "REJECTED" | "REQUIRES_REVIEW" = "PENDING"
+
   try {
     const dbUser = await prisma.user.findUnique({
       where: { supabaseId: user.id },
@@ -28,15 +30,19 @@ export default async function DashboardPage() {
       },
     })
 
-    if (dbUser?.accounts[0]) {
-      account = {
-        ...dbUser.accounts[0],
-        balance: dbUser.accounts[0].balance.toString(),
+    if (dbUser) {
+      kycStatus = dbUser.kycStatus
+
+      if (dbUser.accounts[0]) {
+        account = {
+          ...dbUser.accounts[0],
+          balance: dbUser.accounts[0].balance.toString(),
+        }
       }
     }
   } catch (error) {
     console.error("Error fetching account:", error)
   }
 
-  return <DashboardClient account={account} userEmail={user.email || ""} />
+  return <DashboardClient account={account} userEmail={user.email || ""} kycStatus={kycStatus} />
 }

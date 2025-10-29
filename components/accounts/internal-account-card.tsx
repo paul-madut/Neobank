@@ -1,6 +1,7 @@
 "use client"
 
 import { useState } from "react"
+import { useRouter } from "next/navigation"
 import { Button } from "@/components/ui/button"
 import {
   ArrowDownToLine,
@@ -9,7 +10,8 @@ import {
   Eye,
   EyeOff,
   Check,
-  Calendar
+  Calendar,
+  ShieldAlert
 } from "lucide-react"
 import { toast } from "sonner"
 import { format } from "date-fns"
@@ -17,11 +19,15 @@ import type { InternalAccount } from "@/types/account"
 
 interface InternalAccountCardProps {
   account: InternalAccount
+  kycStatus?: "PENDING" | "VERIFIED" | "REJECTED" | "REQUIRES_REVIEW"
 }
 
-export function InternalAccountCard({ account }: InternalAccountCardProps) {
+export function InternalAccountCard({ account, kycStatus = "PENDING" }: InternalAccountCardProps) {
+  const router = useRouter()
   const [showFullAccount, setShowFullAccount] = useState(false)
   const [copiedField, setCopiedField] = useState<string | null>(null)
+
+  const isVerified = kycStatus === "VERIFIED"
 
   const balance =
     typeof account.balance === "string"
@@ -172,24 +178,48 @@ export function InternalAccountCard({ account }: InternalAccountCardProps) {
           <Button
             variant="default"
             className="w-full"
-            disabled
+            onClick={() => {
+              if (!isVerified) {
+                toast.error("KYC verification required")
+                router.push("/kyc")
+              } else {
+                toast.info("Coming soon")
+              }
+            }}
           >
-            <ArrowDownToLine className="w-4 h-4 mr-2" />
+            {!isVerified && <ShieldAlert className="w-4 h-4 mr-2" />}
+            {isVerified && <ArrowDownToLine className="w-4 h-4 mr-2" />}
             Add Money
           </Button>
           <Button
             variant="outline"
             className="w-full"
-            disabled
+            onClick={() => {
+              if (!isVerified) {
+                toast.error("KYC verification required")
+                router.push("/kyc")
+              } else {
+                toast.info("Coming soon")
+              }
+            }}
           >
-            <CreditCard className="w-4 h-4 mr-2" />
+            {!isVerified && <ShieldAlert className="w-4 h-4 mr-2" />}
+            {isVerified && <CreditCard className="w-4 h-4 mr-2" />}
             Add Card
           </Button>
         </div>
 
-        <p className="text-xs text-center text-zinc-500 dark:text-zinc-400">
-          Coming soon: Add money and virtual cards
-        </p>
+        {!isVerified && (
+          <p className="text-xs text-center text-yellow-600 dark:text-yellow-400 flex items-center justify-center gap-1">
+            <ShieldAlert className="w-3 h-3" />
+            KYC verification required for these features
+          </p>
+        )}
+        {isVerified && (
+          <p className="text-xs text-center text-zinc-500 dark:text-zinc-400">
+            Coming soon: Add money and virtual cards
+          </p>
+        )}
       </div>
     </div>
   )

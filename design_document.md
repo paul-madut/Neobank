@@ -51,8 +51,9 @@ Caching: Redis (optional for MVP)
 Storage: Supabase Storage (KYC documents, receipts)
 External Services
 Identity Verification: Stripe Identity (KYC/AML)
-Payment Processing: Stripe (Treasury, Issuing)
+Payment Processing: Stripe (Treasury)
 Bank Connectivity: Plaid (ACH transfers)
+Card Issuing:Lithic
 Infrastructure
 Hosting: Vercel
 Monitoring: Sentry

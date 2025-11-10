@@ -135,6 +135,7 @@ export default function BanksPage() {
             <ExternalAccountsList
               accounts={accounts}
               onRefresh={() => fetchAccounts(true)}
+              onAccountDeleted={() => fetchAccounts()}
             />
           )}
         </div>

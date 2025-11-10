@@ -13,6 +13,7 @@ import {
   LogOut,
   User,
   ShieldCheck,
+  Wallet,
 } from "lucide-react"
 import { cn } from "@/lib/utils"
 
@@ -45,6 +46,13 @@ export function DashboardSidebar({ userEmail, kycStatus }: DashboardSidebarProps
       href: "/banks",
       icon: (
         <Building2 className="text-zinc-700 dark:text-zinc-200 h-5 w-5 flex-shrink-0" />
+      ),
+    },
+    {
+      label: "Deposit & Withdraw",
+      href: "/ach",
+      icon: (
+        <Wallet className="text-zinc-700 dark:text-zinc-200 h-5 w-5 flex-shrink-0" />
       ),
     },
     {

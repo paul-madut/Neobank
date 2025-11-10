@@ -26,9 +26,10 @@ model User {
   lastName        String?
   kycStatus       KycStatus @default(PENDING)
   kycProviderId   String?   // Stripe Identity verification ID
-  isAdmin         Boolean   @default(false) // Admin access flag
-  stripeCustomerId String?  // Stripe customer ID for card issuance
-  createdAt       DateTime  @default(now())
+  isAdmin             Boolean   @default(false) // Admin access flag
+  stripeCustomerId    String?   // Stripe customer ID for payments
+  stripeCardholderId  String?   @unique // Stripe Issuing cardholder ID
+  createdAt           DateTime  @default(now())
   updatedAt       DateTime  @updatedAt
 
   accounts        Account[]
@@ -159,6 +160,8 @@ enum TransactionType {
   ACH_CREDIT
   CARD_AUTHORIZATION
   CARD_CAPTURE
+  CARD_PURCHASE  // Virtual card purchase transaction
+  CARD_REFUND    // Virtual card refund
   REFUND
   FEE
   DEPOSIT

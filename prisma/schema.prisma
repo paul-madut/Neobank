@@ -26,12 +26,16 @@ model User {
   lastName        String?
   kycStatus       KycStatus @default(PENDING)
   kycProviderId   String?   // Stripe Identity verification ID
+  isAdmin         Boolean   @default(false) // Admin access flag
+  stripeCustomerId String?  // Stripe customer ID for card issuance
   createdAt       DateTime  @default(now())
   updatedAt       DateTime  @updatedAt
 
   accounts        Account[]
   transactions    Transaction[]
   externalAccounts ExternalAccount[]
+  achTransfers    ACHTransfer[]
+  cards           Card[]
 
   @@index([supabaseId])
   @@index([email])
@@ -107,6 +111,7 @@ model ExternalAccount {
   updatedAt           DateTime @updatedAt
 
   user                User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  achTransfers        ACHTransfer[]
 
   @@index([userId])
   @@index([plaidItemId])
@@ -192,4 +197,78 @@ model LedgerEntry {
 enum EntryType {
   DEBIT
   CREDIT
+}
+
+// ============================================
+// ACH TRANSFERS (PLAID)
+// ============================================
+
+model ACHTransfer {
+  id                String             @id @default(uuid())
+  userId            String
+  externalAccountId String
+  internalAccountId String
+  transactionId     String?            @unique // Linked internal transaction
+  direction         ACHDirection
+  amount            Decimal            @db.Decimal(19, 4)
+  currency          String             @default("USD")
+  status            ACHStatus          @default(PENDING)
+  plaidTransferId   String?            @unique // Plaid transfer ID
+  failureReason     String?
+  metadata          Json?              // Plaid transfer metadata
+  expectedDate      DateTime?          // Expected settlement date
+  createdAt         DateTime           @default(now())
+  updatedAt         DateTime           @updatedAt
+
+  user              User               @relation(fields: [userId], references: [id], onDelete: Cascade)
+  externalAccount   ExternalAccount    @relation(fields: [externalAccountId], references: [id])
+
+  @@index([userId, createdAt])
+  @@index([status])
+  @@index([plaidTransferId])
+}
+
+enum ACHDirection {
+  DEPOSIT    // From external bank to neobank (credit)
+  WITHDRAWAL // From neobank to external bank (debit)
+}
+
+enum ACHStatus {
+  PENDING      // Transfer initiated, awaiting Plaid
+  PROCESSING   // Transfer in progress
+  COMPLETED    // Successfully settled
+  FAILED       // Transfer failed
+  CANCELLED    // User cancelled
+  RETURNED     // ACH return (insufficient funds, etc.)
+}
+
+// ============================================
+// VIRTUAL CARDS (STRIPE ISSUING)
+// ============================================
+
+model Card {
+  id                String      @id @default(uuid())
+  userId            String
+  stripeCardId      String      @unique // Stripe Issuing card ID
+  last4             String      // Last 4 digits
+  brand             String      @default("visa")
+  expiryMonth       Int
+  expiryYear        Int
+  status            CardStatus  @default(ACTIVE)
+  spendingLimit     Decimal?    @db.Decimal(19, 4) // Per-transaction limit
+  monthlyLimit      Decimal?    @db.Decimal(19, 4) // Monthly spending limit
+  nickname          String?     // User-defined card name
+  createdAt         DateTime    @default(now())
+  updatedAt         DateTime    @updatedAt
+
+  user              User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([stripeCardId])
+}
+
+enum CardStatus {
+  ACTIVE
+  FROZEN
+  CANCELLED
 }

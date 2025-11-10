@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { Toaster } from "sonner";
 import "./globals.css";
+import { Providers } from "./providers";
 
 export const metadata: Metadata = {
   title: "NeoBank - Banking for the Digital Age",
@@ -15,9 +16,11 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="en">
-      <body>
-        {children}
-        <Toaster position="top-right" richColors />
+      <body suppressHydrationWarning>
+        <Providers>
+          {children}
+          <Toaster position="top-right" richColors />
+        </Providers>
       </body>
     </html>
   );

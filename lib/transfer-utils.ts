@@ -2,6 +2,11 @@ import { prisma } from './prisma'
 import { requireKYC } from './kyc-utils'
 import { v4 as uuidv4 } from 'uuid'
 import { Decimal } from '@prisma/client/runtime/library'
+import {
+  authorizeACHTransfer,
+  createACHTransfer,
+  getACHTransferStatus,
+} from './plaid-utils'
 
 // Transfer limits from environment variables
 const MAX_TRANSFER_AMOUNT = parseFloat(
@@ -426,4 +431,388 @@ export async function getRecentRecipients(
   }
 
   return recipients
+}
+
+// ============================================
+// ACH TRANSFER FUNCTIONS
+// ============================================
+
+export interface ACHTransferResult {
+  success: boolean
+  achTransferId?: string
+  transactionId?: string
+  status: 'PENDING' | 'PROCESSING' | 'COMPLETED' | 'FAILED'
+  error?: string
+}
+
+/**
+ * Validate an ACH transfer request
+ */
+export async function validateACHTransfer(
+  userId: string,
+  externalAccountId: string,
+  amount: number,
+  direction: 'DEPOSIT' | 'WITHDRAWAL'
+): Promise<{ isValid: boolean; error?: string; externalAccount?: any; internalAccount?: any }> {
+  // Validate amount
+  if (amount <= 0) {
+    return { isValid: false, error: 'Transfer amount must be greater than zero' }
+  }
+
+  // Check KYC status
+  try {
+    await requireKYC(userId)
+  } catch (error) {
+    return { isValid: false, error: 'KYC verification required for ACH transfers' }
+  }
+
+  // Get external account
+  const externalAccount = await prisma.externalAccount.findUnique({
+    where: { id: externalAccountId },
+    include: { user: true },
+  })
+
+  if (!externalAccount || externalAccount.userId !== userId) {
+    return { isValid: false, error: 'External account not found or unauthorized' }
+  }
+
+  if (externalAccount.verificationStatus !== 'VERIFIED') {
+    return { isValid: false, error: 'External account must be verified before transfers' }
+  }
+
+  // Get user's internal account
+  const internalAccount = await prisma.account.findFirst({
+    where: {
+      userId,
+      status: 'ACTIVE',
+      accountType: 'CHECKING',
+    },
+  })
+
+  if (!internalAccount) {
+    return { isValid: false, error: 'No active internal account found' }
+  }
+
+  // For withdrawals, check internal account balance
+  if (direction === 'WITHDRAWAL') {
+    const balance = parseFloat(internalAccount.balance.toString())
+    if (balance < amount) {
+      return {
+        isValid: false,
+        error: `Insufficient funds. Available balance: $${balance.toFixed(2)}`,
+      }
+    }
+  }
+
+  // Check transfer limits
+  const limitCheck = await checkTransferLimits(userId, internalAccount.id, amount)
+  if (!limitCheck.allowed) {
+    return { isValid: false, error: limitCheck.error }
+  }
+
+  return { isValid: true, externalAccount, internalAccount }
+}
+
+/**
+ * Execute an ACH transfer (deposit or withdrawal)
+ */
+export async function executeACHTransfer(
+  userId: string,
+  externalAccountId: string,
+  amount: number,
+  direction: 'DEPOSIT' | 'WITHDRAWAL',
+  description?: string
+): Promise<ACHTransferResult> {
+  try {
+    // Validate transfer
+    const validation = await validateACHTransfer(
+      userId,
+      externalAccountId,
+      amount,
+      direction
+    )
+
+    if (!validation.isValid) {
+      return {
+        success: false,
+        status: 'FAILED',
+        error: validation.error,
+      }
+    }
+
+    const { externalAccount, internalAccount } = validation
+
+    // Generate idempotency key
+    const idempotencyKey = uuidv4()
+
+    // Determine transaction type
+    const transactionType = direction === 'DEPOSIT' ? 'ACH_CREDIT' : 'ACH_DEBIT'
+
+    // Check if we're in sandbox/development mode
+    const isSandbox = process.env.PLAID_ENV !== 'production'
+    let plaidTransferId: string
+    let transferStatus: 'PENDING' | 'PROCESSING' = 'PROCESSING'
+
+    if (isSandbox) {
+      // Simulate Plaid transfer in sandbox mode
+      // Plaid Transfer API requires special access, so we simulate it in sandbox
+      console.log('Simulating ACH transfer in sandbox mode')
+      plaidTransferId = `sandbox_transfer_${uuidv4()}`
+      transferStatus = 'PROCESSING'
+    } else {
+      // Production: Use actual Plaid Transfer API
+      try {
+        const plaidType = direction === 'DEPOSIT' ? 'credit' : 'debit'
+        const authorization = await authorizeACHTransfer(
+          externalAccount.plaidAccessToken,
+          externalAccount.plaidAccountId,
+          amount,
+          plaidType
+        )
+
+        if (authorization.decision !== 'approved') {
+          return {
+            success: false,
+            status: 'FAILED',
+            error: `ACH transfer not approved: ${authorization.decisionRationale?.description || 'Unknown reason'}`,
+          }
+        }
+
+        const plaidTransfer = await createACHTransfer(
+          authorization.authorizationId,
+          description || `${direction} - ${amount}`,
+          idempotencyKey
+        )
+
+        plaidTransferId = plaidTransfer.transferId
+      } catch (error) {
+        console.error('Plaid Transfer API error:', error)
+        return {
+          success: false,
+          status: 'FAILED',
+          error: 'Plaid Transfer API error. Please contact support.',
+        }
+      }
+    }
+
+    // Step 3: Create database records in transaction
+    const result = await prisma.$transaction(async (tx) => {
+      // Create internal transaction record
+      const transaction = await tx.transaction.create({
+        data: {
+          userId,
+          fromAccountId: direction === 'WITHDRAWAL' ? internalAccount.id : null,
+          toAccountId: direction === 'DEPOSIT' ? internalAccount.id : null,
+          amount: new Decimal(amount),
+          currency: 'USD',
+          type: transactionType,
+          status: transferStatus,
+          description: description || `${direction} from ${externalAccount.institutionName}`,
+          idempotencyKey,
+          externalId: plaidTransferId,
+          metadata: {
+            direction,
+            externalAccountId,
+            plaidTransferId: plaidTransferId,
+            institutionName: externalAccount.institutionName,
+            sandbox: isSandbox,
+          },
+        },
+      })
+
+      // Create ACHTransfer record
+      const achTransfer = await tx.aCHTransfer.create({
+        data: {
+          userId,
+          externalAccountId,
+          internalAccountId: internalAccount.id,
+          transactionId: transaction.id,
+          direction,
+          amount: new Decimal(amount),
+          currency: 'USD',
+          status: transferStatus,
+          plaidTransferId: plaidTransferId,
+          metadata: {
+            sandbox: isSandbox,
+          },
+        },
+      })
+
+      // In sandbox mode, immediately complete the transfer (simulate instant ACH)
+      if (isSandbox) {
+        const currentBalance = parseFloat(internalAccount.balance.toString())
+        let newBalance: number
+        let entryType: 'DEBIT' | 'CREDIT'
+        let ledgerDescription: string
+
+        if (direction === 'DEPOSIT') {
+          newBalance = currentBalance + amount
+          entryType = 'CREDIT'
+          ledgerDescription = 'ACH Deposit (Sandbox)'
+        } else {
+          newBalance = currentBalance - amount
+          entryType = 'DEBIT'
+          ledgerDescription = 'ACH Withdrawal (Sandbox)'
+        }
+
+        // Create ledger entry
+        await tx.ledgerEntry.create({
+          data: {
+            accountId: internalAccount.id,
+            transactionId: transaction.id,
+            entryType,
+            amount: new Decimal(amount),
+            balanceAfter: new Decimal(newBalance),
+            description: ledgerDescription,
+          },
+        })
+
+        // Update account balance
+        await tx.account.update({
+          where: { id: internalAccount.id },
+          data: { balance: new Decimal(newBalance) },
+        })
+
+        // Update transaction and ACH transfer to COMPLETED
+        await tx.transaction.update({
+          where: { id: transaction.id },
+          data: { status: 'COMPLETED' },
+        })
+
+        await tx.aCHTransfer.update({
+          where: { id: achTransfer.id },
+          data: { status: 'COMPLETED' },
+        })
+      }
+
+      return {
+        achTransferId: achTransfer.id,
+        transactionId: transaction.id,
+        status: isSandbox ? ('COMPLETED' as const) : ('PROCESSING' as const),
+      }
+    })
+
+    return {
+      success: true,
+      achTransferId: result.achTransferId,
+      transactionId: result.transactionId,
+      status: result.status,
+    }
+  } catch (error) {
+    console.error('ACH transfer error:', error)
+    return {
+      success: false,
+      status: 'FAILED',
+      error: error instanceof Error ? error.message : 'ACH transfer failed',
+    }
+  }
+}
+
+/**
+ * Update ACH transfer status based on Plaid webhook
+ * This will be called from the webhook handler
+ */
+export async function updateACHTransferStatus(
+  plaidTransferId: string,
+  newStatus: string,
+  failureReason?: string
+) {
+  try {
+    const achTransfer = await prisma.aCHTransfer.findUnique({
+      where: { plaidTransferId },
+      include: {
+        internalAccount: true,
+        transaction: true,
+      },
+    })
+
+    if (!achTransfer) {
+      console.error('ACH transfer not found:', plaidTransferId)
+      return
+    }
+
+    // Map Plaid status to our status
+    let status: 'PENDING' | 'PROCESSING' | 'COMPLETED' | 'FAILED' | 'CANCELLED' | 'RETURNED'
+    let transactionStatus: 'PENDING' | 'PROCESSING' | 'COMPLETED' | 'FAILED' | 'CANCELLED'
+
+    switch (newStatus) {
+      case 'posted':
+        status = 'COMPLETED'
+        transactionStatus = 'COMPLETED'
+        break
+      case 'failed':
+      case 'cancelled':
+        status = 'FAILED'
+        transactionStatus = 'FAILED'
+        break
+      case 'returned':
+        status = 'RETURNED'
+        transactionStatus = 'FAILED'
+        break
+      default:
+        status = 'PROCESSING'
+        transactionStatus = 'PROCESSING'
+    }
+
+    // Update in transaction
+    await prisma.$transaction(async (tx) => {
+      // Update ACH transfer
+      await tx.aCHTransfer.update({
+        where: { id: achTransfer.id },
+        data: {
+          status,
+          failureReason,
+        },
+      })
+
+      // Update transaction
+      await tx.transaction.update({
+        where: { id: achTransfer.transactionId! },
+        data: { status: transactionStatus },
+      })
+
+      // If completed, update balances and create ledger entries
+      if (status === 'COMPLETED' && achTransfer.transaction) {
+        const amount = parseFloat(achTransfer.amount.toString())
+        const currentBalance = parseFloat(achTransfer.internalAccount.balance.toString())
+
+        let newBalance: number
+        let entryType: 'DEBIT' | 'CREDIT'
+        let description: string
+
+        if (achTransfer.direction === 'DEPOSIT') {
+          newBalance = currentBalance + amount
+          entryType = 'CREDIT'
+          description = 'ACH Deposit'
+        } else {
+          newBalance = currentBalance - amount
+          entryType = 'DEBIT'
+          description = 'ACH Withdrawal'
+        }
+
+        // Create ledger entry
+        await tx.ledgerEntry.create({
+          data: {
+            accountId: achTransfer.internalAccountId,
+            transactionId: achTransfer.transactionId!,
+            entryType,
+            amount: new Decimal(amount),
+            balanceAfter: new Decimal(newBalance),
+            description,
+          },
+        })
+
+        // Update account balance
+        await tx.account.update({
+          where: { id: achTransfer.internalAccountId },
+          data: { balance: new Decimal(newBalance) },
+        })
+      }
+    })
+
+    console.log(`ACH transfer ${plaidTransferId} updated to ${status}`)
+  } catch (error) {
+    console.error('Error updating ACH transfer status:', error)
+    throw error
+  }
 }

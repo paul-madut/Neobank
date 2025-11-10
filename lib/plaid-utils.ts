@@ -8,6 +8,12 @@ import {
   LinkTokenCreateRequest,
   ItemPublicTokenExchangeRequest,
   AccountsGetRequest,
+  TransferAuthorizationCreateRequest,
+  TransferCreateRequest,
+  TransferGetRequest,
+  TransferType,
+  ACHClass,
+  TransferNetwork,
 } from 'plaid'
 import type { PlaidAccount, PlaidInstitution } from '@/types/account'
 
@@ -140,4 +146,98 @@ export function generateAccountNumber(): string {
     .toString()
     .padStart(5, '0')
   return timestamp.slice(-8) + random
+}
+
+/**
+ * Authorize an ACH transfer (required before creating transfer)
+ * @param accessToken - The Plaid access token
+ * @param accountId - The Plaid account ID
+ * @param amount - Amount in dollars
+ * @param type - 'debit' (withdrawal) or 'credit' (deposit)
+ */
+export async function authorizeACHTransfer(
+  accessToken: string,
+  accountId: string,
+  amount: number,
+  type: 'debit' | 'credit'
+) {
+  try {
+    const request: TransferAuthorizationCreateRequest = {
+      access_token: accessToken,
+      account_id: accountId,
+      type: type === 'debit' ? TransferType.Debit : TransferType.Credit,
+      network: TransferNetwork.Ach,
+      amount: amount.toFixed(2),
+      ach_class: ACHClass.Ppd, // Prearranged Payment and Deposit
+      user: {
+        legal_name: 'NeoBank Customer', // Should be user's actual name
+      },
+    }
+
+    const response = await plaidClient.transferAuthorizationCreate(request)
+    return {
+      authorizationId: response.data.authorization.id,
+      decision: response.data.authorization.decision,
+      decisionRationale: response.data.authorization.decision_rationale,
+    }
+  } catch (error) {
+    console.error('Error authorizing ACH transfer:', error)
+    throw new Error('Failed to authorize ACH transfer')
+  }
+}
+
+/**
+ * Create an ACH transfer
+ * @param authorizationId - Authorization ID from authorizeACHTransfer
+ * @param description - Transfer description
+ * @param idempotencyKey - Unique key to prevent duplicate transfers
+ */
+export async function createACHTransfer(
+  authorizationId: string,
+  description: string,
+  idempotencyKey: string
+) {
+  try {
+    const request: TransferCreateRequest = {
+      authorization_id: authorizationId,
+      description: description,
+      idempotency_key: idempotencyKey,
+    }
+
+    const response = await plaidClient.transferCreate(request)
+    return {
+      transferId: response.data.transfer.id,
+      status: response.data.transfer.status,
+      achReturnCode: response.data.transfer.ach_return_code,
+      created: response.data.transfer.created,
+    }
+  } catch (error) {
+    console.error('Error creating ACH transfer:', error)
+    throw new Error('Failed to create ACH transfer')
+  }
+}
+
+/**
+ * Get ACH transfer status
+ * @param transferId - The Plaid transfer ID
+ */
+export async function getACHTransferStatus(transferId: string) {
+  try {
+    const request: TransferGetRequest = {
+      transfer_id: transferId,
+    }
+
+    const response = await plaidClient.transferGet(request)
+    return {
+      transferId: response.data.transfer.id,
+      status: response.data.transfer.status,
+      amount: response.data.transfer.amount,
+      achReturnCode: response.data.transfer.ach_return_code,
+      failureReason: response.data.transfer.failure_reason,
+      metadata: response.data.transfer.metadata,
+    }
+  } catch (error) {
+    console.error('Error getting ACH transfer status:', error)
+    throw new Error('Failed to get ACH transfer status')
+  }
 }

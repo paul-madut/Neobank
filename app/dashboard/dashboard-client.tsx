@@ -61,6 +61,15 @@ export function DashboardClient({ account, userEmail, kycStatus }: DashboardClie
                     Quick Actions
                   </h3>
                   <div className="space-y-3">
+                    <Link href="/ach" className="block">
+                      <Button
+                        variant="outline"
+                        className="w-full justify-between"
+                      >
+                        Deposit / Withdraw
+                        <ArrowRight className="w-4 h-4" />
+                      </Button>
+                    </Link>
                     <Link href="/banks" className="block">
                       <Button
                         variant="outline"

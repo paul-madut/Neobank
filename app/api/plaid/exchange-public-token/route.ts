@@ -50,6 +50,11 @@ export async function POST(request: Request) {
       })
     }
 
+    // In sandbox/development mode, automatically verify accounts
+    // In production, accounts would need manual verification (microdeposits, etc.)
+    const isProduction = process.env.PLAID_ENV === 'production'
+    const verificationStatus = isProduction ? 'PENDING' : 'VERIFIED'
+
     // Save external accounts to database
     const createdAccounts = await Promise.all(
       accounts.map(async (account) => {
@@ -58,6 +63,7 @@ export async function POST(request: Request) {
           update: {
             availableBalance: account.balances.available?.toString() || null,
             currentBalance: account.balances.current?.toString() || null,
+            verificationStatus: verificationStatus, // Update verification status
             lastSynced: new Date(),
           },
           create: {
@@ -75,6 +81,7 @@ export async function POST(request: Request) {
             availableBalance: account.balances.available?.toString() || null,
             currentBalance: account.balances.current?.toString() || null,
             currency: account.balances.iso_currency_code || 'USD',
+            verificationStatus: verificationStatus, // Set verification status on creation
           },
         })
       })

@@ -2,7 +2,7 @@
 
 A full-stack banking demo built on a real double-entry ledger: identity verification, virtual cards, linked bank accounts, and P2P transfers that cannot be double-spent, cannot lose a cent to floating point, and cannot be replayed by a retried request.
 
-- **Live demo:** TODO - add the deployed URL here
+- **Live demo:** https://neobank-chi.vercel.app
 - **Try it:** the landing page has an "Explore the live demo" button. No signup, no email confirmation, no KYC. It provisions a private throwaway account seeded with a balance, transaction history, a virtual card, a linked bank, and contacts to send money to.
 
 ---

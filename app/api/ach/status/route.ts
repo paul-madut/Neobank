@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase-server'
 import { prisma } from '@/lib/prisma'
+import { notFound, serverError, unauthorized } from '@/lib/api-utils'
 
 export async function GET(request: NextRequest) {
   try {
@@ -12,7 +13,7 @@ export async function GET(request: NextRequest) {
     } = await supabase.auth.getUser()
 
     if (!authUser) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+      return unauthorized()
     }
 
     // Get user from database
@@ -21,7 +22,7 @@ export async function GET(request: NextRequest) {
     })
 
     if (!user) {
-      return NextResponse.json({ error: 'User not found' }, { status: 404 })
+      return notFound('User not found')
     }
 
     // Get query parameters
@@ -53,7 +54,7 @@ export async function GET(request: NextRequest) {
       })
 
       if (!achTransfer || achTransfer.userId !== user.id) {
-        return NextResponse.json({ error: 'ACH transfer not found' }, { status: 404 })
+        return notFound('ACH transfer not found')
       }
 
       return NextResponse.json({
@@ -113,13 +114,6 @@ export async function GET(request: NextRequest) {
       total: achTransfers.length,
     })
   } catch (error) {
-    console.error('ACH status API error:', error)
-    return NextResponse.json(
-      {
-        error: 'Internal server error',
-        details: error instanceof Error ? error.message : 'Unknown error',
-      },
-      { status: 500 }
-    )
+    return serverError('ach/status', error)
   }
 }

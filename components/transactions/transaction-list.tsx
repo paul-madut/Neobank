@@ -1,10 +1,13 @@
 "use client"
 
-import { useEffect, useState } from "react"
+import { useCallback, useEffect, useState } from "react"
 import { TransactionItem } from "./transaction-item"
 import { Button } from "@/components/ui/button"
 import { Loader2 } from "lucide-react"
-import type { TransactionWithDetails } from "@/types/account"
+import type {
+  GetTransactionsResponse,
+  TransactionWithDetails,
+} from "@/types/account"
 
 interface TransactionListProps {
   limit?: number
@@ -22,51 +25,55 @@ export function TransactionList({
   const [loadingMore, setLoadingMore] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [hasMore, setHasMore] = useState(false)
-  const [offset, setOffset] = useState(0)
 
-  const fetchTransactions = async (currentOffset: number, append: boolean = false) => {
-    try {
-      if (append) {
-        setLoadingMore(true)
-      } else {
-        setLoading(true)
+  const fetchTransactions = useCallback(
+    async (currentOffset: number, append: boolean = false) => {
+      try {
+        if (append) {
+          setLoadingMore(true)
+        } else {
+          setLoading(true)
+        }
+
+        const response = await fetch(
+          `/api/transactions?limit=${limit}&offset=${currentOffset}`
+        )
+
+        if (!response.ok) {
+          throw new Error("Failed to fetch transactions")
+        }
+
+        const data: GetTransactionsResponse = await response.json()
+
+        if (append) {
+          setTransactions((prev) => [...prev, ...data.transactions])
+        } else {
+          setTransactions(data.transactions)
+        }
+
+        setHasMore(data.pagination.hasMore)
+        setError(null)
+      } catch (err) {
+        console.error("Error fetching transactions:", err)
+        setError(
+          err instanceof Error ? err.message : "Failed to load transactions"
+        )
+      } finally {
+        setLoading(false)
+        setLoadingMore(false)
       }
-
-      const response = await fetch(
-        `/api/transactions?limit=${limit}&offset=${currentOffset}`
-      )
-
-      if (!response.ok) {
-        throw new Error("Failed to fetch transactions")
-      }
-
-      const data = await response.json()
-
-      if (append) {
-        setTransactions((prev) => [...prev, ...data.transactions])
-      } else {
-        setTransactions(data.transactions)
-      }
-
-      setHasMore(data.pagination.hasMore)
-      setError(null)
-    } catch (err: any) {
-      console.error("Error fetching transactions:", err)
-      setError(err.message || "Failed to load transactions")
-    } finally {
-      setLoading(false)
-      setLoadingMore(false)
-    }
-  }
+    },
+    [limit]
+  )
 
   useEffect(() => {
     fetchTransactions(0)
-  }, [])
+  }, [fetchTransactions])
 
   const handleLoadMore = () => {
-    const newOffset = offset + limit
-    setOffset(newOffset)
-    fetchTransactions(newOffset, true)
+    // Page from what is already on screen rather than a separate offset
+    // counter, which would go stale if the list were refetched from the top.
+    fetchTransactions(transactions.length, true)
   }
 
   if (loading && transactions.length === 0) {

@@ -3,6 +3,17 @@ import { createClient } from '@/lib/supabase-server'
 import { prisma } from '@/lib/prisma'
 import { createCardholder, createVirtualCard } from '@/lib/stripe-issuing-utils'
 import { requireKYC } from '@/lib/kyc-utils'
+import { createCardSchema } from '@/lib/validation'
+import {
+  badRequest,
+  forbidden,
+  notFound,
+  serverError,
+  tooManyRequests,
+  unauthorized,
+  validationError,
+} from '@/lib/api-utils'
+import { RATE_LIMITS, rateLimit } from '@/lib/rate-limit'
 
 export async function POST(request: NextRequest) {
   try {
@@ -14,7 +25,12 @@ export async function POST(request: NextRequest) {
     } = await supabase.auth.getUser()
 
     if (!user) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+      return unauthorized()
+    }
+
+    const limit = rateLimit(`cards:create:${user.id}`, RATE_LIMITS.provisioning)
+    if (!limit.allowed) {
+      return tooManyRequests(limit.retryAfterSeconds)
     }
 
     // Get user from database
@@ -23,21 +39,23 @@ export async function POST(request: NextRequest) {
     })
 
     if (!dbUser) {
-      return NextResponse.json({ error: 'User not found' }, { status: 404 })
+      return notFound('User not found')
     }
 
     // Require KYC verification
     try {
       await requireKYC(dbUser.id)
-    } catch (error) {
-      return NextResponse.json(
-        { error: 'KYC verification required to create virtual cards' },
-        { status: 403 }
-      )
+    } catch {
+      return forbidden('KYC verification required to create virtual cards')
     }
 
-    // Parse request body
-    const body = await request.json()
+    // Parse and validate request body. Spending limits used to be passed to
+    // Stripe straight out of parseFloat, so a negative limit sailed through.
+    const parsed = createCardSchema.safeParse(await request.json())
+    if (!parsed.success) {
+      return validationError(parsed.error)
+    }
+
     const {
       spendingLimit,
       monthlyLimit,
@@ -45,58 +63,33 @@ export async function POST(request: NextRequest) {
       dateOfBirth,
       address,
       phoneNumber,
-    } = body
+    } = parsed.data
 
     // Validate required cardholder information
     if (!dbUser.firstName || !dbUser.lastName) {
-      return NextResponse.json(
-        { error: 'First name and last name are required. Please update your profile.' },
-        { status: 400 }
-      )
-    }
-
-    if (!dateOfBirth) {
-      return NextResponse.json(
-        { error: 'Date of birth is required for card creation' },
-        { status: 400 }
-      )
-    }
-
-    if (!address || !address.line1 || !address.city || !address.state || !address.postalCode) {
-      return NextResponse.json(
-        { error: 'Complete address is required for card creation' },
-        { status: 400 }
+      return badRequest(
+        'First name and last name are required. Please update your profile.'
       )
     }
 
     // Create Stripe cardholder if not exists
-    let cardholderId = dbUser.stripeCardholderId
+    let cardholderId: string
 
-    if (!cardholderId) {
+    if (dbUser.stripeCardholderId) {
+      cardholderId = dbUser.stripeCardholderId
+    } else {
       const cardholderResult = await createCardholder({
         email: dbUser.email,
         firstName: dbUser.firstName,
         lastName: dbUser.lastName,
         phoneNumber,
-        dateOfBirth: {
-          day: dateOfBirth.day,
-          month: dateOfBirth.month,
-          year: dateOfBirth.year,
-        },
-        address: {
-          line1: address.line1,
-          city: address.city,
-          state: address.state,
-          postalCode: address.postalCode,
-          country: address.country || 'US',
-        },
+        dateOfBirth,
+        address,
       })
 
       if (!cardholderResult.success) {
-        return NextResponse.json(
-          { error: cardholderResult.error || 'Failed to create cardholder' },
-          { status: 500 }
-        )
+        console.error('Stripe cardholder creation failed:', cardholderResult.error)
+        return badRequest('Could not create cardholder with the details provided')
       }
 
       cardholderId = cardholderResult.cardholderId
@@ -112,15 +105,13 @@ export async function POST(request: NextRequest) {
     const cardResult = await createVirtualCard({
       cardholderId,
       currency: 'usd',
-      spendingLimit: spendingLimit ? parseFloat(spendingLimit) : undefined,
-      monthlyLimit: monthlyLimit ? parseFloat(monthlyLimit) : undefined,
+      spendingLimit: spendingLimit?.toNumber(),
+      monthlyLimit: monthlyLimit?.toNumber(),
     })
 
     if (!cardResult.success) {
-      return NextResponse.json(
-        { error: cardResult.error || 'Failed to create virtual card' },
-        { status: 500 }
-      )
+      console.error('Stripe card creation failed:', cardResult.error)
+      return badRequest('Could not create the virtual card')
     }
 
     // Save card to database
@@ -133,8 +124,8 @@ export async function POST(request: NextRequest) {
         expiryMonth: cardResult.expMonth,
         expiryYear: cardResult.expYear,
         status: 'ACTIVE',
-        spendingLimit: spendingLimit ? parseFloat(spendingLimit) : null,
-        monthlyLimit: monthlyLimit ? parseFloat(monthlyLimit) : null,
+        spendingLimit: spendingLimit ?? null,
+        monthlyLimit: monthlyLimit ?? null,
         nickname,
       },
     })
@@ -148,19 +139,13 @@ export async function POST(request: NextRequest) {
         expiryMonth: card.expiryMonth,
         expiryYear: card.expiryYear,
         status: card.status,
-        spendingLimit: card.spendingLimit,
-        monthlyLimit: card.monthlyLimit,
+        spendingLimit: card.spendingLimit?.toString() ?? null,
+        monthlyLimit: card.monthlyLimit?.toString() ?? null,
         nickname: card.nickname,
         createdAt: card.createdAt,
       },
     })
-  } catch (error: any) {
-    console.error('Error creating virtual card:', error)
-    return NextResponse.json(
-      {
-        error: error.message || 'Failed to create virtual card',
-      },
-      { status: 500 }
-    )
+  } catch (error) {
+    return serverError('cards/create', error)
   }
 }

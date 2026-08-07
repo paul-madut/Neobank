@@ -2,8 +2,9 @@ import { NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase-server'
 import { prisma } from '@/lib/prisma'
 import { stripe } from '@/lib/stripe'
+import { serverError } from '@/lib/api-utils'
 
-export async function GET(request: Request) {
+export async function GET() {
   try {
     // Get authenticated user
     const supabase = await createClient()
@@ -64,11 +65,7 @@ export async function GET(request: Request) {
       kycStatus: dbUser.kycStatus,
       kycProviderId: dbUser.kycProviderId,
     })
-  } catch (error: any) {
-    console.error('Error checking KYC status:', error)
-    return NextResponse.json(
-      { error: error.message || 'Failed to check KYC status' },
-      { status: 500 }
-    )
+  } catch (error) {
+    return serverError('kyc/status', error)
   }
 }

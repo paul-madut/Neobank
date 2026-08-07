@@ -16,6 +16,21 @@ interface GridPatternProps {
   duration?: number;
 }
 
+interface Square {
+  id: number;
+  pos: [number, number];
+}
+
+function generateSquares(count: number): Square[] {
+  return Array.from({ length: count }, (_, i) => ({
+    id: i,
+    pos: [Math.floor(Math.random() * 50), Math.floor(Math.random() * 50)] as [
+      number,
+      number,
+    ],
+  }));
+}
+
 export function AnimatedGridPattern({
   width = 40,
   height = 40,
@@ -29,20 +44,17 @@ export function AnimatedGridPattern({
   ...props
 }: GridPatternProps) {
   const id = useId();
-  const [squares, setSquares] = useState<Array<{ id: number; pos: [number, number] }>>([]);
+  const [squares, setSquares] = useState<Array<Square>>([]);
 
   useEffect(() => {
-    const generateSquares = () => {
-      return Array.from({ length: numSquares }, (_, i) => ({
-        id: i,
-        pos: [
-          Math.floor(Math.random() * 50),
-          Math.floor(Math.random() * 50),
-        ] as [number, number],
-      }));
-    };
+    // Same reasoning as Meteors: Math.random() cannot run during render without
+    // the server and the client disagreeing on the markup. Deferring the state
+    // update to the next frame avoids cascading a second render on mount.
+    const frame = requestAnimationFrame(() => {
+      setSquares(generateSquares(numSquares));
+    });
 
-    setSquares(generateSquares());
+    return () => cancelAnimationFrame(frame);
   }, [numSquares]);
 
   return (

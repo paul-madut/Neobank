@@ -37,8 +37,10 @@ function LoginForm() {
         router.push("/dashboard")
         router.refresh()
       }
-    } catch (err: any) {
-      setError(err.message || "An error occurred during sign in")
+    } catch (err) {
+      setError(
+        err instanceof Error ? err.message : "An error occurred during sign in"
+      )
     } finally {
       setLoading(false)
     }
@@ -127,7 +129,7 @@ function LoginForm() {
 
           <div className="mt-6 text-center text-sm">
             <span className="text-zinc-600 dark:text-zinc-400">
-              Don't have an account?{" "}
+              Don&apos;t have an account?{" "}
             </span>
             <Link
               href="/register"

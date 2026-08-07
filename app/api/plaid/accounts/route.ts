@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase-server'
 import { prisma } from '@/lib/prisma'
 import { getBalances } from '@/lib/plaid-utils'
+import { serverError } from '@/lib/api-utils'
 
 export async function GET(request: Request) {
   try {
@@ -34,17 +35,14 @@ export async function GET(request: Request) {
     let accounts = dbUser.externalAccounts
 
     if (refresh && accounts.length > 0) {
-      // Group accounts by access token (itemId)
-      const accountsByToken = accounts.reduce((acc, account) => {
-        if (!acc[account.plaidAccessToken]) {
-          acc[account.plaidAccessToken] = []
-        }
-        acc[account.plaidAccessToken].push(account)
-        return acc
-      }, {} as Record<string, typeof accounts>)
+      // One Plaid item can back several accounts, and accountsGet returns all
+      // of them, so hit each distinct access token once.
+      const accessTokens = [
+        ...new Set(accounts.map((account) => account.plaidAccessToken)),
+      ]
 
       // Refresh balances for each token
-      for (const [accessToken, tokenAccounts] of Object.entries(accountsByToken)) {
+      for (const accessToken of accessTokens) {
         try {
           const balances = await getBalances(accessToken)
 
@@ -90,11 +88,7 @@ export async function GET(request: Request) {
     }))
 
     return NextResponse.json({ externalAccounts: serializedAccounts })
-  } catch (error: any) {
-    console.error('Error in get accounts:', error)
-    return NextResponse.json(
-      { error: error.message || 'Failed to get accounts' },
-      { status: 500 }
-    )
+  } catch (error) {
+    return serverError('plaid/accounts', error)
   }
 }

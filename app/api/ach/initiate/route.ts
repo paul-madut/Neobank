@@ -2,6 +2,16 @@ import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase-server'
 import { executeACHTransfer } from '@/lib/transfer-utils'
 import { prisma } from '@/lib/prisma'
+import { achInitiateSchema, idempotencyKey } from '@/lib/validation'
+import {
+  badRequest,
+  notFound,
+  serverError,
+  tooManyRequests,
+  unauthorized,
+  validationError,
+} from '@/lib/api-utils'
+import { RATE_LIMITS, rateLimit } from '@/lib/rate-limit'
 
 export async function POST(request: NextRequest) {
   try {
@@ -13,7 +23,21 @@ export async function POST(request: NextRequest) {
     } = await supabase.auth.getUser()
 
     if (!authUser) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+      return unauthorized()
+    }
+
+    const limit = rateLimit(`ach:initiate:${authUser.id}`, RATE_LIMITS.transfer)
+    if (!limit.allowed) {
+      return tooManyRequests(limit.retryAfterSeconds)
+    }
+
+    // Same contract as P2P: the client owns the key, so a retried request
+    // settles the same ACH transfer rather than starting a second one.
+    const keyResult = idempotencyKey.safeParse(
+      request.headers.get('Idempotency-Key') ?? ''
+    )
+    if (!keyResult.success) {
+      return badRequest('An Idempotency-Key header is required for transfers')
     }
 
     // Get user from database
@@ -22,55 +46,28 @@ export async function POST(request: NextRequest) {
     })
 
     if (!user) {
-      return NextResponse.json({ error: 'User not found' }, { status: 404 })
+      return notFound('User not found')
     }
 
-    // Parse request body
-    const body = await request.json()
-    const { externalAccountId, amount, direction, description } = body
-
-    // Validate required fields
-    if (!externalAccountId || !amount || !direction) {
-      return NextResponse.json(
-        { error: 'Missing required fields: externalAccountId, amount, direction' },
-        { status: 400 }
-      )
+    const parsed = achInitiateSchema.safeParse(await request.json())
+    if (!parsed.success) {
+      return validationError(parsed.error)
     }
 
-    // Validate direction
-    if (direction !== 'DEPOSIT' && direction !== 'WITHDRAWAL') {
-      return NextResponse.json(
-        { error: 'Invalid direction. Must be DEPOSIT or WITHDRAWAL' },
-        { status: 400 }
-      )
-    }
-
-    // Validate amount
-    const transferAmount = parseFloat(amount)
-    if (isNaN(transferAmount) || transferAmount <= 0) {
-      return NextResponse.json(
-        { error: 'Invalid amount. Must be a positive number' },
-        { status: 400 }
-      )
-    }
+    const { externalAccountId, amount, direction, description } = parsed.data
 
     // Execute ACH transfer
     const result = await executeACHTransfer(
       user.id,
       externalAccountId,
-      transferAmount,
+      amount,
       direction,
+      keyResult.data,
       description
     )
 
     if (!result.success) {
-      return NextResponse.json(
-        {
-          error: result.error || 'ACH transfer failed',
-          status: result.status,
-        },
-        { status: 400 }
-      )
+      return badRequest(result.error || 'ACH transfer failed')
     }
 
     return NextResponse.json({
@@ -78,17 +75,13 @@ export async function POST(request: NextRequest) {
       achTransferId: result.achTransferId,
       transactionId: result.transactionId,
       status: result.status,
+      replayed: result.replayed ?? false,
       message:
-        'ACH transfer initiated successfully. It may take 1-3 business days to complete.',
+        result.status === 'COMPLETED'
+          ? 'ACH transfer settled.'
+          : 'ACH transfer initiated. It may take 1-3 business days to complete.',
     })
   } catch (error) {
-    console.error('ACH initiation API error:', error)
-    return NextResponse.json(
-      {
-        error: 'Internal server error',
-        details: error instanceof Error ? error.message : 'Unknown error',
-      },
-      { status: 500 }
-    )
+    return serverError('ach/initiate', error)
   }
 }

@@ -1,9 +1,9 @@
 "use client"
 
 import { useState } from "react"
-import { InternalAccountCard } from "@/components/accounts/internal-account-card"
 import { TransactionList } from "@/components/transactions/transaction-list"
 import { TransactionDetails } from "@/components/transactions/transaction-details"
+import { DemoModeBanner } from "@/components/demo/demo-mode-banner"
 import { Button } from "@/components/ui/button"
 import {
   ArrowLeft,
@@ -12,7 +12,6 @@ import {
   Eye,
   EyeOff,
   Calendar,
-  DollarSign,
   TrendingUp,
   TrendingDown,
   Activity,
@@ -22,14 +21,38 @@ import { format } from "date-fns"
 import Link from "next/link"
 import type { InternalAccount, TransactionWithDetails } from "@/types/account"
 
+export interface MonthlyStats {
+  transactionCount: number
+  moneyIn: string
+  moneyOut: string
+}
+
 interface AccountDetailsClientProps {
   account: InternalAccount | null
   userEmail: string
+  monthlyStats: MonthlyStats
+}
+
+function formatAmount(value: string) {
+  const amount = parseFloat(value)
+
+  return (Number.isFinite(amount) ? amount : 0).toLocaleString("en-US", {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  })
+}
+
+function formatSignedAmount(value: string, sign: "+" | "-") {
+  const amount = parseFloat(value)
+  const prefix = Number.isFinite(amount) && amount > 0 ? sign : ""
+
+  return `${prefix}$${formatAmount(value)}`
 }
 
 export function AccountDetailsClient({
   account,
   userEmail,
+  monthlyStats,
 }: AccountDetailsClientProps) {
   const [showFullAccount, setShowFullAccount] = useState(false)
   const [copiedField, setCopiedField] = useState<string | null>(null)
@@ -67,7 +90,7 @@ export function AccountDetailsClient({
       setCopiedField(fieldName)
       toast.success(`${fieldName} copied to clipboard`)
       setTimeout(() => setCopiedField(null), 2000)
-    } catch (err) {
+    } catch {
       toast.error(`Failed to copy ${fieldName}`)
     }
   }
@@ -76,6 +99,8 @@ export function AccountDetailsClient({
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-zinc-50 via-zinc-100 to-zinc-50 dark:from-zinc-950 dark:via-zinc-900 dark:to-zinc-950">
+      <DemoModeBanner />
+
       <div className="container mx-auto px-4 py-8 max-w-6xl">
         {/* Header */}
         <div className="mb-8">
@@ -216,10 +241,10 @@ export function AccountDetailsClient({
               <Activity className="w-5 h-5 text-zinc-400" />
             </div>
             <p className="text-3xl font-bold text-zinc-900 dark:text-white mb-1">
-              12
+              {monthlyStats.transactionCount}
             </p>
             <p className="text-xs text-zinc-500 dark:text-zinc-500">
-              Transactions
+              Completed transactions
             </p>
           </div>
 
@@ -231,10 +256,10 @@ export function AccountDetailsClient({
               <TrendingUp className="w-5 h-5 text-green-500" />
             </div>
             <p className="text-3xl font-bold text-green-600 dark:text-green-400 mb-1">
-              +$2,250
+              {formatSignedAmount(monthlyStats.moneyIn, "+")}
             </p>
             <p className="text-xs text-zinc-500 dark:text-zinc-500">
-              Total deposits
+              Received this month
             </p>
           </div>
 
@@ -246,10 +271,10 @@ export function AccountDetailsClient({
               <TrendingDown className="w-5 h-5 text-red-500" />
             </div>
             <p className="text-3xl font-bold text-red-600 dark:text-red-400 mb-1">
-              -$309.48
+              {formatSignedAmount(monthlyStats.moneyOut, "-")}
             </p>
             <p className="text-xs text-zinc-500 dark:text-zinc-500">
-              Total spending
+              Sent this month
             </p>
           </div>
         </div>

@@ -2,6 +2,10 @@
 
 import { useCallback, useState, useEffect } from "react"
 import { usePlaidLink } from "react-plaid-link"
+import type {
+  PlaidLinkError,
+  PlaidLinkOptionsWithLinkToken,
+} from "react-plaid-link"
 import { Button } from "@/components/ui/button"
 
 interface PlaidLinkButtonProps {
@@ -35,17 +39,24 @@ export function PlaidLinkButton({
 
         const data = await response.json()
         setLinkToken(data.linkToken)
-      } catch (err: any) {
+      } catch (err) {
         console.error("Error creating link token:", err)
-        setError(err.message || "Failed to initialize Plaid Link")
+        setError(
+          err instanceof Error
+            ? err.message
+            : "Failed to initialize Plaid Link"
+        )
       }
     }
 
     createLinkToken()
   }, [])
 
+  // Plaid passes a metadata object as the second argument to both callbacks.
+  // Neither is needed here, and a shorter function is still assignable to
+  // PlaidLinkOnSuccess / PlaidLinkOnExit.
   const onSuccessCallback = useCallback(
-    async (publicToken: string, metadata: any) => {
+    async (publicToken: string) => {
       setLoading(true)
       setError(null)
 
@@ -68,9 +79,11 @@ export function PlaidLinkButton({
 
         // Call parent success callback
         onSuccess?.()
-      } catch (err: any) {
+      } catch (err) {
         console.error("Error exchanging token:", err)
-        setError(err.message || "Failed to connect bank account")
+        setError(
+          err instanceof Error ? err.message : "Failed to connect bank account"
+        )
       } finally {
         setLoading(false)
       }
@@ -79,17 +92,24 @@ export function PlaidLinkButton({
   )
 
   const onExitCallback = useCallback(
-    (err: any, metadata: any) => {
+    (err: PlaidLinkError | null) => {
       if (err) {
         console.error("Plaid Link error:", err)
-        setError(err.message || "Failed to connect bank account")
+        // PlaidLinkError has no `message` field. Reading one gave undefined,
+        // so every Link failure showed the generic fallback instead of the
+        // reason Plaid actually reported.
+        setError(
+          err.display_message ||
+            err.error_message ||
+            "Failed to connect bank account"
+        )
       }
       onExit?.()
     },
     [onExit]
   )
 
-  const config = {
+  const config: PlaidLinkOptionsWithLinkToken = {
     token: linkToken,
     onSuccess: onSuccessCallback,
     onExit: onExitCallback,

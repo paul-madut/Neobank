@@ -1,9 +1,6 @@
 import { plaidClient } from './plaid'
 import {
-  Configuration,
   CountryCode,
-  PlaidApi,
-  PlaidEnvironments,
   Products,
   LinkTokenCreateRequest,
   ItemPublicTokenExchangeRequest,
@@ -15,18 +12,20 @@ import {
   ACHClass,
   TransferNetwork,
 } from 'plaid'
-import type { PlaidAccount, PlaidInstitution } from '@/types/account'
 
 /**
  * Create a Link token for Plaid Link initialization
  * @param userId - The user's Supabase ID
- * @param userName - The user's name for display
+ * @param legalName - The user's legal name. Plaid matches it against the name
+ *   on the linked bank account, so it must be the real name and not a
+ *   display handle or email. Omitted when we do not have one on file.
  */
-export async function createLinkToken(userId: string, userName: string) {
+export async function createLinkToken(userId: string, legalName?: string) {
   try {
     const request: LinkTokenCreateRequest = {
       user: {
         client_user_id: userId,
+        ...(legalName ? { legal_name: legalName } : {}),
       },
       client_name: 'NeoBank',
       products: [Products.Auth, Products.Transactions],
@@ -154,12 +153,16 @@ export function generateAccountNumber(): string {
  * @param accountId - The Plaid account ID
  * @param amount - Amount in dollars
  * @param type - 'debit' (withdrawal) or 'credit' (deposit)
+ * @param legalName - The account holder's legal name. Plaid uses it for
+ *   authorization and returns risk signals when it does not match the name on
+ *   the bank account, so a placeholder degrades the decision quality.
  */
 export async function authorizeACHTransfer(
   accessToken: string,
   accountId: string,
   amount: number,
-  type: 'debit' | 'credit'
+  type: 'debit' | 'credit',
+  legalName?: string
 ) {
   try {
     const request: TransferAuthorizationCreateRequest = {
@@ -170,7 +173,7 @@ export async function authorizeACHTransfer(
       amount: amount.toFixed(2),
       ach_class: ACHClass.Ppd, // Prearranged Payment and Deposit
       user: {
-        legal_name: 'NeoBank Customer', // Should be user's actual name
+        legal_name: legalName || 'NeoBank Customer',
       },
     }
 
@@ -188,19 +191,26 @@ export async function authorizeACHTransfer(
 
 /**
  * Create an ACH transfer
+ * @param accessToken - The Plaid access token for the funding item
+ * @param accountId - The Plaid account ID being debited or credited
  * @param authorizationId - Authorization ID from authorizeACHTransfer
- * @param description - Transfer description
+ * @param description - Transfer description (Plaid caps this at 15 characters)
  * @param idempotencyKey - Unique key to prevent duplicate transfers
  */
 export async function createACHTransfer(
+  accessToken: string,
+  accountId: string,
   authorizationId: string,
   description: string,
   idempotencyKey: string
 ) {
   try {
     const request: TransferCreateRequest = {
+      access_token: accessToken,
+      account_id: accountId,
       authorization_id: authorizationId,
-      description: description,
+      // Plaid rejects descriptions longer than 15 characters.
+      description: description.slice(0, 15),
       idempotency_key: idempotencyKey,
     }
 
@@ -208,7 +218,7 @@ export async function createACHTransfer(
     return {
       transferId: response.data.transfer.id,
       status: response.data.transfer.status,
-      achReturnCode: response.data.transfer.ach_return_code,
+      failureCode: response.data.transfer.failure_reason?.failure_code ?? null,
       created: response.data.transfer.created,
     }
   } catch (error) {
@@ -232,7 +242,7 @@ export async function getACHTransferStatus(transferId: string) {
       transferId: response.data.transfer.id,
       status: response.data.transfer.status,
       amount: response.data.transfer.amount,
-      achReturnCode: response.data.transfer.ach_return_code,
+      failureCode: response.data.transfer.failure_reason?.failure_code ?? null,
       failureReason: response.data.transfer.failure_reason,
       metadata: response.data.transfer.metadata,
     }

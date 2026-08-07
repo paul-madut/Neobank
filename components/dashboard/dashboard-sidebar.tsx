@@ -3,7 +3,13 @@
 import { useState } from "react"
 import Link from "next/link"
 import { usePathname } from "next/navigation"
-import { Sidebar, SidebarBody, SidebarLink } from "@/components/ui/sidebar"
+import { motion } from "framer-motion"
+import {
+  Sidebar,
+  SidebarBody,
+  SidebarLink,
+  useSidebar,
+} from "@/components/ui/sidebar"
 import {
   LayoutDashboard,
   Building2,
@@ -81,13 +87,6 @@ export function DashboardSidebar({ userEmail, kycStatus }: DashboardSidebarProps
         )} />
       ),
     },
-    {
-      label: "Settings",
-      href: "/settings",
-      icon: (
-        <Settings className="text-zinc-700 dark:text-zinc-200 h-5 w-5 flex-shrink-0" />
-      ),
-    },
   ]
 
   return (
@@ -106,6 +105,16 @@ export function DashboardSidebar({ userEmail, kycStatus }: DashboardSidebarProps
                 )}
               />
             ))}
+            {/* There is no /settings route yet. Matches the disabled Settings
+                button in the dashboard's Quick Actions rather than shipping a
+                nav item that 404s. */}
+            <SidebarItemDisabled
+              label="Settings"
+              title="Settings are coming soon"
+              icon={
+                <Settings className="text-zinc-400 dark:text-zinc-600 h-5 w-5 flex-shrink-0" />
+              }
+            />
           </div>
         </div>
         <div>
@@ -134,6 +143,42 @@ export function DashboardSidebar({ userEmail, kycStatus }: DashboardSidebarProps
         </div>
       </SidebarBody>
     </Sidebar>
+  )
+}
+
+/**
+ * A nav row that looks like a SidebarLink but goes nowhere, for features that
+ * do not exist yet. Mirrors SidebarLink's label animation so it collapses and
+ * expands with the rest of the sidebar.
+ */
+function SidebarItemDisabled({
+  label,
+  icon,
+  title,
+}: {
+  label: string
+  icon: React.ReactNode
+  title?: string
+}) {
+  const { open, animate } = useSidebar()
+
+  return (
+    <div
+      aria-disabled="true"
+      title={title}
+      className="flex items-center justify-start gap-2 py-2 opacity-50 cursor-not-allowed select-none"
+    >
+      {icon}
+      <motion.span
+        animate={{
+          display: animate ? (open ? "inline-block" : "none") : "inline-block",
+          opacity: animate ? (open ? 1 : 0) : 1,
+        }}
+        className="text-zinc-500 dark:text-zinc-400 text-sm whitespace-pre inline-block !p-0 !m-0"
+      >
+        {label}
+      </motion.span>
+    </div>
   )
 }
 

@@ -1,256 +1,119 @@
-import { PrismaClient } from '@prisma/client'
-import { v4 as uuidv4 } from 'uuid'
+import { prisma } from '../lib/prisma'
+import { ensureDemoContacts, seedDemoDataFor } from '../lib/demo'
 
-const prisma = new PrismaClient()
+/**
+ * Seed a real user's account with demo transaction history.
+ *
+ * Usage: pnpm tsx scripts/seed-transactions.ts <user-email>
+ *
+ * This script writes money, so it goes through `lib/ledger.ts` exactly like the
+ * application does. That matters more than it looks: an earlier version of this
+ * file used parseFloat on amounts, wrote single-sided ledger entries, and set
+ * absolute balances with a stale read. Every one of those is the specific bug
+ * the rest of the codebase is built to prevent, and `scripts/` is exactly where
+ * a reviewer looks to check whether the claims hold everywhere or only on the
+ * happy path.
+ *
+ * For a brand new database prefer `pnpm prisma db seed`, which also creates the
+ * house accounts and the canonical demo customer. Use this script when you have
+ * signed up through the real auth flow and want your own account populated.
+ */
+async function main() {
+  const userEmail = process.argv[2]
 
-interface SeedTransactionData {
-  amount: number
-  type: 'DEPOSIT' | 'WITHDRAWAL' | 'FEE'
-  description: string
-  daysAgo: number
-  status?: 'PENDING' | 'COMPLETED' | 'FAILED'
-}
+  if (!userEmail) {
+    console.error('Error: please provide a user email address')
+    console.log('\nUsage: pnpm tsx scripts/seed-transactions.ts <user-email>')
+    console.log('Example: pnpm tsx scripts/seed-transactions.ts you@example.com\n')
+    process.exitCode = 1
+    return
+  }
 
-const SAMPLE_TRANSACTIONS: SeedTransactionData[] = [
-  {
-    amount: 1000.0,
-    type: 'DEPOSIT',
-    description: 'Initial Account Opening Deposit',
-    daysAgo: 30,
-    status: 'COMPLETED',
-  },
-  {
-    amount: 500.0,
-    type: 'DEPOSIT',
-    description: 'Payroll Deposit - Employer Inc',
-    daysAgo: 25,
-    status: 'COMPLETED',
-  },
-  {
-    amount: 50.0,
-    type: 'WITHDRAWAL',
-    description: 'ATM Withdrawal - Chase Bank',
-    daysAgo: 22,
-    status: 'COMPLETED',
-  },
-  {
-    amount: 25.99,
-    type: 'WITHDRAWAL',
-    description: 'Coffee Roasters - Debit Card Purchase',
-    daysAgo: 20,
-    status: 'COMPLETED',
-  },
-  {
-    amount: 100.0,
-    type: 'WITHDRAWAL',
-    description: 'Rent Payment - Property Management',
-    daysAgo: 18,
-    status: 'COMPLETED',
-  },
-  {
-    amount: 200.0,
-    type: 'DEPOSIT',
-    description: 'Freelance Payment - Client Services',
-    daysAgo: 15,
-    status: 'COMPLETED',
-  },
-  {
-    amount: 75.5,
-    type: 'WITHDRAWAL',
-    description: 'Grocery Store - Debit Card Purchase',
-    daysAgo: 12,
-    status: 'COMPLETED',
-  },
-  {
-    amount: 150.0,
-    type: 'DEPOSIT',
-    description: 'Venmo Transfer In',
-    daysAgo: 10,
-    status: 'COMPLETED',
-  },
-  {
-    amount: 12.99,
-    type: 'WITHDRAWAL',
-    description: 'Netflix Subscription',
-    daysAgo: 8,
-    status: 'COMPLETED',
-  },
-  {
-    amount: 45.0,
-    type: 'WITHDRAWAL',
-    description: 'Restaurant - Dinner',
-    daysAgo: 5,
-    status: 'COMPLETED',
-  },
-  {
-    amount: 300.0,
-    type: 'DEPOSIT',
-    description: 'Tax Refund',
-    daysAgo: 3,
-    status: 'COMPLETED',
-  },
-  {
-    amount: 100.0,
-    type: 'DEPOSIT',
-    description: 'Transfer from External Account',
-    daysAgo: 1,
-    status: 'PENDING',
-  },
-]
+  console.log(`Seeding transaction history for ${userEmail}`)
 
-async function seedTransactions(userEmail: string) {
-  console.log(`🌱 Starting transaction seed for user: ${userEmail}`)
-
-  // Find user
   const user = await prisma.user.findUnique({
     where: { email: userEmail },
     include: {
       accounts: {
-        where: { status: 'ACTIVE' },
+        where: {
+          status: 'ACTIVE',
+          // Never target a SYSTEM house account.
+          accountType: { in: ['CHECKING', 'SAVINGS'] },
+        },
+        orderBy: { createdAt: 'asc' },
         take: 1,
       },
     },
   })
 
   if (!user) {
-    throw new Error(`User with email ${userEmail} not found`)
-  }
-
-  if (!user.accounts[0]) {
-    throw new Error(`No active account found for user ${userEmail}`)
+    throw new Error(`No user found with email ${userEmail}`)
   }
 
   const account = user.accounts[0]
-  console.log(`✅ Found user: ${user.email}`)
-  console.log(`✅ Found account: ${account.accountNumber}`)
-  console.log(`💰 Current balance: $${account.balance}`)
+  if (!account) {
+    throw new Error(`No active customer account found for ${userEmail}`)
+  }
 
-  // Check if transactions already exist
-  const existingTransactions = await prisma.transaction.count({
-    where: {
-      userId: user.id,
-      description: {
-        in: SAMPLE_TRANSACTIONS.map((t) => t.description),
-      },
-    },
+  console.log(`  account ${account.accountNumber}`)
+  console.log(`  starting balance: $${account.balance.toFixed(2)}`)
+
+  await ensureDemoContacts()
+
+  const { created, skipped } = await seedDemoDataFor({
+    userId: user.id,
+    accountId: account.id,
   })
 
-  if (existingTransactions > 0) {
+  if (skipped) {
     console.log(
-      `⚠️  Found ${existingTransactions} existing seed transactions. Skipping seed.`
+      '\nThis account already has transactions, so nothing was posted.'
     )
     console.log(
-      `💡 To re-seed, delete existing transactions first or use different descriptions.`
+      'Clear them first with: pnpm tsx scripts/clean-fake-transactions.ts ' +
+        userEmail
     )
     return
   }
 
-  console.log(`\n📝 Creating ${SAMPLE_TRANSACTIONS.length} transactions...\n`)
+  const updated = await prisma.account.findUniqueOrThrow({
+    where: { id: account.id },
+  })
 
-  let runningBalance = parseFloat(account.balance.toString())
+  console.log(`\n  posted ${created} transactions`)
+  console.log(`  final balance: $${updated.balance.toFixed(2)}`)
 
-  // Create transactions one by one to avoid transaction timeout
-  for (const txData of SAMPLE_TRANSACTIONS) {
-    const transactionDate = new Date()
-    transactionDate.setDate(transactionDate.getDate() - txData.daysAgo)
+  // Prove the postings balanced rather than asserting it in a comment.
+  const entries = await prisma.ledgerEntry.findMany({
+    where: { transaction: { userId: user.id } },
+    select: { entryType: true, amount: true },
+  })
 
-    // Calculate balance change
-    const isDeposit = txData.type === 'DEPOSIT'
-    const balanceChange = isDeposit ? txData.amount : -txData.amount
-    const newBalance = runningBalance + balanceChange
+  const debits = entries
+    .filter((e) => e.entryType === 'DEBIT')
+    .reduce((sum, e) => sum.add(e.amount), updated.balance.sub(updated.balance))
+  const credits = entries
+    .filter((e) => e.entryType === 'CREDIT')
+    .reduce((sum, e) => sum.add(e.amount), updated.balance.sub(updated.balance))
 
-    // Generate idempotency key
-    const idempotencyKey = uuidv4()
+  console.log(`  ledger debits:  $${debits.toFixed(2)}`)
+  console.log(`  ledger credits: $${credits.toFixed(2)}`)
 
-    console.log(
-      `  ${isDeposit ? '💵' : '💸'} ${txData.type}: ${txData.description}`
+  if (!debits.equals(credits)) {
+    throw new Error(
+      `Ledger does not balance: debits ${debits.toFixed(4)} vs credits ${credits.toFixed(4)}`
     )
-    console.log(
-      `     Amount: $${txData.amount.toFixed(2)} | Balance: $${runningBalance.toFixed(2)} → $${newBalance.toFixed(2)}`
-    )
-
-    // Use individual transaction for each entry to avoid timeout
-    await prisma.$transaction(async (tx) => {
-      // Create transaction record
-      const transaction = await tx.transaction.create({
-        data: {
-          userId: user.id,
-          fromAccountId: isDeposit ? null : account.id,
-          toAccountId: isDeposit ? account.id : null,
-          amount: txData.amount,
-          currency: 'USD',
-          type: txData.type,
-          status: txData.status || 'COMPLETED',
-          description: txData.description,
-          idempotencyKey,
-          createdAt: transactionDate,
-          updatedAt: transactionDate,
-        },
-      })
-
-      // Create ledger entry (double-entry bookkeeping)
-      if (isDeposit) {
-        // DEPOSIT: Credit the account (increases balance)
-        await tx.ledgerEntry.create({
-          data: {
-            accountId: account.id,
-            transactionId: transaction.id,
-            entryType: 'CREDIT',
-            amount: txData.amount,
-            balanceAfter: newBalance,
-            description: txData.description,
-            createdAt: transactionDate,
-          },
-        })
-      } else {
-        // WITHDRAWAL/FEE: Debit the account (decreases balance)
-        await tx.ledgerEntry.create({
-          data: {
-            accountId: account.id,
-            transactionId: transaction.id,
-            entryType: 'DEBIT',
-            amount: txData.amount,
-            balanceAfter: newBalance,
-            description: txData.description,
-            createdAt: transactionDate,
-          },
-        })
-      }
-
-      // Update account balance
-      await tx.account.update({
-        where: { id: account.id },
-        data: { balance: newBalance },
-      })
-    })
-
-    runningBalance = newBalance
   }
 
-  console.log(`\n✅ Successfully created ${SAMPLE_TRANSACTIONS.length} transactions!`)
-  console.log(`💰 Final balance: $${runningBalance.toFixed(2)}`)
-  console.log(`\n🎉 Seed complete!\n`)
-}
-
-// Main execution
-async function main() {
-  const userEmail = process.argv[2]
-
-  if (!userEmail) {
-    console.error('❌ Error: Please provide a user email address')
-    console.log('\nUsage: pnpm tsx scripts/seed-transactions.ts <user-email>')
-    console.log('Example: pnpm tsx scripts/seed-transactions.ts user@example.com\n')
-    process.exit(1)
-  }
-
-  try {
-    await seedTransactions(userEmail)
-  } catch (error) {
-    console.error('❌ Error seeding transactions:', error)
-    process.exit(1)
-  } finally {
-    await prisma.$disconnect()
-  }
+  console.log('  debits equal credits\n')
+  console.log('Seed complete')
 }
 
 main()
+  .catch((error) => {
+    console.error('Seed failed:', error instanceof Error ? error.message : error)
+    process.exitCode = 1
+  })
+  .finally(async () => {
+    await prisma.$disconnect()
+  })

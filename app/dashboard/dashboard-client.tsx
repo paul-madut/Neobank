@@ -3,27 +3,50 @@
 import { InternalAccountCard } from "@/components/accounts/internal-account-card"
 import { TransactionList } from "@/components/transactions/transaction-list"
 import { KYCBanner } from "@/components/kyc/kyc-banner"
+import { DemoModeBanner } from "@/components/demo/demo-mode-banner"
 import { DashboardSidebar } from "@/components/dashboard/dashboard-sidebar"
 import { Button } from "@/components/ui/button"
 import { ArrowRight } from "lucide-react"
 import Link from "next/link"
 import type { InternalAccount } from "@/types/account"
 
+export interface MonthlyStats {
+  transactionCount: number
+  moneyIn: string
+  moneyOut: string
+}
+
 interface DashboardClientProps {
   account: InternalAccount | null
   userEmail: string
   kycStatus: "PENDING" | "VERIFIED" | "REJECTED" | "REQUIRES_REVIEW"
+  monthlyStats: MonthlyStats
 }
 
-export function DashboardClient({ account, userEmail, kycStatus }: DashboardClientProps) {
+function formatAmount(value: string) {
+  const amount = parseFloat(value)
+
+  return `$${(Number.isFinite(amount) ? amount : 0).toLocaleString("en-US", {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  })}`
+}
+
+export function DashboardClient({
+  account,
+  userEmail,
+  kycStatus,
+  monthlyStats,
+}: DashboardClientProps) {
   return (
-    <div className="flex h-screen w-full bg-gradient-to-br from-zinc-50 via-zinc-100 to-zinc-50 dark:from-zinc-950 dark:via-zinc-900 dark:to-zinc-950">
+    <div className="flex flex-col md:flex-row h-screen w-full bg-gradient-to-br from-zinc-50 via-zinc-100 to-zinc-50 dark:from-zinc-950 dark:via-zinc-900 dark:to-zinc-950">
       {/* Sidebar */}
       <DashboardSidebar userEmail={userEmail} kycStatus={kycStatus} />
 
       {/* Main Content */}
       <div className="flex-1 flex flex-col overflow-hidden">
-        {/* KYC Banner */}
+        {/* Demo + KYC Banners */}
+        <DemoModeBanner />
         <KYCBanner kycStatus={kycStatus} />
 
         {/* Scrollable Content */}
@@ -119,7 +142,7 @@ export function DashboardClient({ account, userEmail, kycStatus }: DashboardClie
                         Transactions
                       </p>
                       <p className="text-2xl font-bold text-zinc-900 dark:text-white">
-                        12
+                        {monthlyStats.transactionCount}
                       </p>
                     </div>
                     <div>
@@ -127,7 +150,7 @@ export function DashboardClient({ account, userEmail, kycStatus }: DashboardClie
                         Spent
                       </p>
                       <p className="text-2xl font-bold text-zinc-900 dark:text-white">
-                        $309.48
+                        {formatAmount(monthlyStats.moneyOut)}
                       </p>
                     </div>
                   </div>

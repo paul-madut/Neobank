@@ -1,12 +1,5 @@
 import Stripe from 'stripe'
-
-if (!process.env.STRIPE_SECRET_KEY) {
-  throw new Error('STRIPE_SECRET_KEY is not set')
-}
-
-const stripe = new Stripe(process.env.STRIPE_SECRET_KEY, {
-  apiVersion: '2024-12-18.acacia',
-})
+import { stripe } from './stripe'
 
 export interface CreateCardholderParams {
   email: string
@@ -35,9 +28,32 @@ export interface CreateCardParams {
 }
 
 /**
+ * Discriminated results, so callers that check `success` get the payload
+ * narrowed to non-optional instead of having to non-null assert every field.
+ */
+export type CreateCardholderResult =
+  | { success: true; cardholderId: string; cardholder: Stripe.Issuing.Cardholder }
+  | { success: false; error: string }
+
+export type CreateCardResult =
+  | {
+      success: true
+      cardId: string
+      last4: string
+      brand: string
+      expMonth: number
+      expYear: number
+      status: Stripe.Issuing.Card.Status
+      card: Stripe.Issuing.Card
+    }
+  | { success: false; error: string }
+
+/**
  * Create a Stripe Issuing cardholder
  */
-export async function createCardholder(params: CreateCardholderParams) {
+export async function createCardholder(
+  params: CreateCardholderParams
+): Promise<CreateCardholderResult> {
   try {
     const cardholder = await stripe.issuing.cardholders.create({
       name: `${params.firstName} ${params.lastName}`,
@@ -81,7 +97,9 @@ export async function createCardholder(params: CreateCardholderParams) {
 /**
  * Create a virtual card
  */
-export async function createVirtualCard(params: CreateCardParams) {
+export async function createVirtualCard(
+  params: CreateCardParams
+): Promise<CreateCardResult> {
   try {
     const cardParams: Stripe.Issuing.CardCreateParams = {
       cardholder: params.cardholderId,
@@ -92,23 +110,24 @@ export async function createVirtualCard(params: CreateCardParams) {
 
     // Add spending controls if provided
     if (params.spendingLimit || params.monthlyLimit) {
-      cardParams.spending_controls = {
-        spending_limits: [],
-      }
+      const spendingLimits: Stripe.Issuing.CardCreateParams.SpendingControls.SpendingLimit[] =
+        []
 
       if (params.spendingLimit) {
-        cardParams.spending_controls.spending_limits.push({
+        spendingLimits.push({
           amount: Math.round(params.spendingLimit * 100), // Convert to cents
           interval: 'per_authorization',
         })
       }
 
       if (params.monthlyLimit) {
-        cardParams.spending_controls.spending_limits.push({
+        spendingLimits.push({
           amount: Math.round(params.monthlyLimit * 100), // Convert to cents
           interval: 'monthly',
         })
       }
+
+      cardParams.spending_controls = { spending_limits: spendingLimits }
     }
 
     const card = await stripe.issuing.cards.create(cardParams)
@@ -209,13 +228,19 @@ export async function getCardDetails(cardId: string) {
       expand: ['number', 'cvc'],
     })
 
+    // Stripe's Issuing.Card type omits number and cvc because they are only
+    // present on an expanded retrieve. Narrow to the expanded shape rather
+    // than silencing the compiler.
+    const expanded = card as Stripe.Issuing.Card & {
+      number?: string
+      cvc?: string
+    }
+
     return {
       success: true,
       card,
-      // @ts-ignore - number and cvc are available when expanded
-      number: card.number,
-      // @ts-ignore
-      cvc: card.cvc,
+      number: expanded.number,
+      cvc: expanded.cvc,
     }
   } catch (error) {
     console.error('Error retrieving card details:', error)

@@ -35,8 +35,26 @@ export async function proxy(request: NextRequest) {
     data: { user },
   } = await supabase.auth.getUser()
 
-  // Protected routes that require authentication
-  const protectedRoutes = ["/dashboard"]
+  // Protected routes that require authentication.
+  //
+  // Prefix matched, so "/kyc" also covers "/kyc/pending" and friends. This is
+  // defence in depth only: proxy execution can be bypassed in some deployment
+  // configurations, so every page listed here also does its own
+  // supabase.auth.getUser() check server-side.
+  //
+  // Deliberately absent: "/", "/login", "/register", "/forgot-password",
+  // "/reset-password", "/auth/*" and the API webhooks, all of which must stay
+  // reachable without a session.
+  const protectedRoutes = [
+    "/account",
+    "/ach",
+    "/admin",
+    "/banks",
+    "/cards",
+    "/dashboard",
+    "/kyc",
+    "/transfers",
+  ]
   const authRoutes = ["/login", "/register"]
 
   const isProtectedRoute = protectedRoutes.some((route) =>

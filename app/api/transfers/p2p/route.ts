@@ -2,6 +2,16 @@ import { NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase-server'
 import { prisma } from '@/lib/prisma'
 import { executeP2PTransfer } from '@/lib/transfer-utils'
+import { idempotencyKey, p2pTransferSchema } from '@/lib/validation'
+import {
+  badRequest,
+  notFound,
+  serverError,
+  tooManyRequests,
+  unauthorized,
+  validationError,
+} from '@/lib/api-utils'
+import { RATE_LIMITS, rateLimit } from '@/lib/rate-limit'
 
 export async function POST(request: Request) {
   try {
@@ -12,7 +22,24 @@ export async function POST(request: Request) {
     } = await supabase.auth.getUser()
 
     if (!user) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+      return unauthorized()
+    }
+
+    const limit = rateLimit(`transfers:p2p:${user.id}`, RATE_LIMITS.transfer)
+    if (!limit.allowed) {
+      return tooManyRequests(limit.retryAfterSeconds)
+    }
+
+    // The key must come from the client and must be stable across retries of
+    // the same logical transfer. Generating one here would make every retry a
+    // new transfer, which is exactly the bug this replaces.
+    const keyResult = idempotencyKey.safeParse(
+      request.headers.get('Idempotency-Key') ?? ''
+    )
+    if (!keyResult.success) {
+      return badRequest(
+        'An Idempotency-Key header is required for transfers'
+      )
     }
 
     // Find user in database
@@ -21,41 +48,27 @@ export async function POST(request: Request) {
     })
 
     if (!dbUser) {
-      return NextResponse.json({ error: 'User not found' }, { status: 404 })
+      return notFound('User not found')
     }
 
-    // Parse request body
-    const body = await request.json()
-    const { recipientIdentifier, amount, description } = body
-
-    // Validate required fields
-    if (!recipientIdentifier) {
-      return NextResponse.json(
-        { error: 'Recipient email or account number is required' },
-        { status: 400 }
-      )
+    const parsed = p2pTransferSchema.safeParse(await request.json())
+    if (!parsed.success) {
+      return validationError(parsed.error)
     }
 
-    if (!amount || typeof amount !== 'number') {
-      return NextResponse.json(
-        { error: 'Valid transfer amount is required' },
-        { status: 400 }
-      )
-    }
+    const { recipientIdentifier, amount, description } = parsed.data
 
     // Execute transfer
     const result = await executeP2PTransfer(
       dbUser.id,
       recipientIdentifier,
       amount,
+      keyResult.data,
       description
     )
 
     if (!result.success) {
-      return NextResponse.json(
-        { error: result.error },
-        { status: 400 }
-      )
+      return badRequest(result.error || 'Transfer failed')
     }
 
     // Get the created transaction with details
@@ -91,10 +104,7 @@ export async function POST(request: Request) {
     })
 
     if (!transaction) {
-      return NextResponse.json(
-        { error: 'Transaction not found' },
-        { status: 404 }
-      )
+      return notFound('Transaction not found')
     }
 
     // Serialize transaction (convert Decimal to string)
@@ -124,16 +134,13 @@ export async function POST(request: Request) {
       success: true,
       transaction: serializedTransaction,
       status: result.status,
+      replayed: result.replayed ?? false,
       message:
         result.status === 'PENDING'
-          ? 'Transfer is pending review'
+          ? 'Transfer is being held for manual review'
           : 'Transfer completed successfully',
     })
-  } catch (error: any) {
-    console.error('Error in P2P transfer:', error)
-    return NextResponse.json(
-      { error: error.message || 'Failed to process transfer' },
-      { status: 500 }
-    )
+  } catch (error) {
+    return serverError('transfers/p2p', error)
   }
 }

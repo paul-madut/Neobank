@@ -1,4 +1,4 @@
-import { PrismaClient } from '@prisma/client'
+import { Prisma, PrismaClient } from '@prisma/client'
 
 const prisma = new PrismaClient()
 
@@ -23,7 +23,7 @@ async function cleanFakeTransactions(userEmail?: string) {
 
   try {
     // Build the where clause
-    const whereClause: any = {
+    const whereClause: Prisma.TransactionWhereInput = {
       description: {
         in: FAKE_TRANSACTION_DESCRIPTIONS,
       },

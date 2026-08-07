@@ -67,8 +67,10 @@ export function CardControls({
 
       toast.success("Card frozen successfully")
       if (onUpdate) onUpdate()
-    } catch (error: any) {
-      toast.error(error.message || "Failed to freeze card")
+    } catch (error) {
+      toast.error(
+        error instanceof Error ? error.message : "Failed to freeze card"
+      )
     } finally {
       setLoading(false)
     }
@@ -91,8 +93,10 @@ export function CardControls({
 
       toast.success("Card unfrozen successfully")
       if (onUpdate) onUpdate()
-    } catch (error: any) {
-      toast.error(error.message || "Failed to unfreeze card")
+    } catch (error) {
+      toast.error(
+        error instanceof Error ? error.message : "Failed to unfreeze card"
+      )
     } finally {
       setLoading(false)
     }
@@ -120,8 +124,10 @@ export function CardControls({
       toast.success("Spending limits updated successfully")
       setShowLimitsDialog(false)
       if (onUpdate) onUpdate()
-    } catch (error: any) {
-      toast.error(error.message || "Failed to update limits")
+    } catch (error) {
+      toast.error(
+        error instanceof Error ? error.message : "Failed to update limits"
+      )
     } finally {
       setLoading(false)
     }
@@ -143,8 +149,10 @@ export function CardControls({
       toast.success("Card cancelled successfully")
       setShowCancelDialog(false)
       if (onUpdate) onUpdate()
-    } catch (error: any) {
-      toast.error(error.message || "Failed to cancel card")
+    } catch (error) {
+      toast.error(
+        error instanceof Error ? error.message : "Failed to cancel card"
+      )
     } finally {
       setLoading(false)
     }

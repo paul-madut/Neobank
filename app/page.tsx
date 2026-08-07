@@ -1,9 +1,9 @@
 import { AnimatedGridPattern } from "@/components/magicui/animated-grid-pattern";
 import { Meteors } from "@/components/magicui/meteors";
-import { ShimmerButton } from "@/components/magicui/shimmer-button";
+import { DemoLoginButton } from "@/components/demo/demo-login-button";
 import { Cover } from "@/components/magicui/cover";
 import { FloatingNavbar } from "@/components/navbar/floating-navbar";
-import { ArrowRight, CreditCard, Lock, Smartphone, TrendingUp } from "lucide-react";
+import { ArrowRight, CreditCard, FlaskConical, Lock, Smartphone, TrendingUp } from "lucide-react";
 import Link from "next/link";
 
 export default function Home() {
@@ -26,8 +26,8 @@ export default function Home() {
 
         <div className="mx-auto max-w-5xl text-center">
           <div className="mb-6 inline-flex items-center gap-2 rounded-full border border-slate-700 bg-slate-800/50 px-4 py-2 text-sm text-slate-300 backdrop-blur-sm">
-            <Lock className="h-4 w-4" />
-            <span>Bank-level security & FDIC insured</span>
+            <FlaskConical className="h-4 w-4" />
+            <span>Portfolio demo - no real money, no real bank</span>
           </div>
 
           <h1 className="mb-6 text-5xl font-bold tracking-tight text-white sm:text-7xl">
@@ -41,39 +41,33 @@ export default function Home() {
           </h1>
 
           <p className="mx-auto mb-10 max-w-2xl text-lg text-slate-400 sm:text-xl">
-            Experience seamless banking with instant transfers, smart budgeting,
-            and powerful financial tools designed for modern life.
+            A full-stack neobank built as a portfolio project: instant transfers
+            on a double-entry ledger, Plaid bank linking, and Stripe-issued
+            virtual cards. Stripe runs in test mode and Plaid in sandbox mode,
+            so no real money is ever involved.
           </p>
 
-          <div className="flex flex-col items-center justify-center gap-4 sm:flex-row">
-            <Link href="/register">
-              <ShimmerButton
-                className="text-base font-semibold shadow-lg"
-                background="linear-gradient(135deg, #667eea 0%, #764ba2 100%)"
-              >
-                Get Started
-                <ArrowRight className="h-5 w-5" />
-              </ShimmerButton>
-            </Link>
+          <div className="flex flex-col items-center justify-center gap-4 sm:flex-row sm:items-start">
+            <DemoLoginButton />
 
-            <a href="#features">
+            <Link href="/register">
               <button className="group inline-flex items-center gap-2 rounded-full border border-slate-700 bg-transparent px-6 py-3 text-base font-semibold text-white transition-all hover:border-slate-500 hover:bg-slate-800/50">
-                Learn More
+                Create an account
                 <ArrowRight className="h-5 w-5 transition-transform group-hover:translate-x-1" />
               </button>
-            </a>
+            </Link>
           </div>
 
-          {/* Stats */}
+          {/* Built With */}
           <div className="mt-20 grid grid-cols-1 gap-8 sm:grid-cols-3">
             {[
-              { label: "Active Users", value: "500K+" },
-              { label: "Total Transactions", value: "$2.5B" },
-              { label: "Trust Rating", value: "4.9/5" },
-            ].map((stat) => (
-              <div key={stat.label} className="rounded-lg border border-slate-800 bg-slate-900/50 p-6 backdrop-blur-sm">
-                <div className="text-3xl font-bold text-white">{stat.value}</div>
-                <div className="mt-1 text-sm text-slate-400">{stat.label}</div>
+              { label: "Frontend & API", value: "Next.js 16" },
+              { label: "Database & ORM", value: "Postgres + Prisma" },
+              { label: "Integrations", value: "Stripe + Plaid" },
+            ].map((item) => (
+              <div key={item.label} className="rounded-lg border border-slate-800 bg-slate-900/50 p-6 backdrop-blur-sm">
+                <div className="text-2xl font-bold text-white">{item.value}</div>
+                <div className="mt-1 text-sm text-slate-400">{item.label}</div>
               </div>
             ))}
           </div>
@@ -85,10 +79,11 @@ export default function Home() {
         <div className="mx-auto max-w-6xl">
           <div className="mb-16 text-center">
             <h2 className="mb-4 text-4xl font-bold text-white sm:text-5xl">
-              Why Choose NeoBank?
+              What NeoBank Demonstrates
             </h2>
             <p className="mx-auto max-w-2xl text-lg text-slate-400">
-              Everything you need to manage your finances in one place
+              The pieces of a modern banking product, built end to end against
+              provider test environments
             </p>
           </div>
 
@@ -96,23 +91,23 @@ export default function Home() {
             {[
               {
                 icon: <Smartphone className="h-8 w-8" />,
-                title: "Mobile First",
-                description: "Manage your money on the go with our intuitive mobile app",
+                title: "Responsive Web App",
+                description: "One responsive interface that works on phone, tablet, and desktop",
               },
               {
                 icon: <Lock className="h-8 w-8" />,
-                title: "Secure & Safe",
-                description: "Bank-grade encryption and biometric authentication",
+                title: "Authenticated Access",
+                description: "Supabase Auth with email/password and OAuth sign-in, plus Stripe Identity verification",
               },
               {
                 icon: <TrendingUp className="h-8 w-8" />,
-                title: "Smart Insights",
-                description: "AI-powered analytics to help you make better financial decisions",
+                title: "Double-Entry Ledger",
+                description: "Every transfer writes matching debit and credit entries in one atomic transaction",
               },
               {
                 icon: <CreditCard className="h-8 w-8" />,
-                title: "Instant Transfers",
-                description: "Send and receive money instantly with zero fees",
+                title: "Cards & Transfers",
+                description: "Stripe Issuing virtual cards and Plaid bank linking, running in test and sandbox mode",
               },
             ].map((feature, idx) => (
               <div
@@ -136,20 +131,15 @@ export default function Home() {
       <section className="relative z-10 px-4 py-20">
         <div className="mx-auto max-w-4xl rounded-3xl border border-slate-800 bg-gradient-to-br from-purple-900/20 to-pink-900/20 p-12 text-center backdrop-blur-sm">
           <h2 className="mb-4 text-4xl font-bold text-white">
-            Ready to transform your banking?
+            Want to look around?
           </h2>
           <p className="mb-8 text-lg text-slate-300">
-            Join thousands of users who are already experiencing the future of finance
+            Jump straight into a populated account. No signup, no email
+            confirmation. Nothing you do here touches real money or a real bank.
           </p>
-          <Link href="/register">
-            <ShimmerButton
-              className="text-lg font-semibold"
-              background="linear-gradient(135deg, #667eea 0%, #764ba2 100%)"
-            >
-              Open Your Account
-              <ArrowRight className="h-5 w-5" />
-            </ShimmerButton>
-          </Link>
+          <div className="flex justify-center">
+            <DemoLoginButton />
+          </div>
         </div>
       </section>
 
@@ -160,41 +150,60 @@ export default function Home() {
             <div>
               <h3 className="mb-4 text-lg font-semibold text-white">NeoBank</h3>
               <p className="text-sm text-slate-400">
-                Modern banking for the digital age
+                A full-stack banking demo built as a portfolio project
               </p>
             </div>
-            {[
-              {
-                title: "Product",
-                links: ["Features", "Security", "Pricing", "API"],
-              },
-              {
-                title: "Company",
-                links: ["About", "Blog", "Careers", "Contact"],
-              },
-              {
-                title: "Legal",
-                links: ["Privacy", "Terms", "Compliance", "Licenses"],
-              },
-            ].map((section) => (
-              <div key={section.title}>
-                <h4 className="mb-4 text-sm font-semibold text-white">
-                  {section.title}
-                </h4>
-                <ul className="space-y-2">
-                  {section.links.map((link) => (
-                    <li key={link}>
-                      <a href="#" className="text-sm text-slate-400 hover:text-white">
-                        {link}
-                      </a>
-                    </li>
-                  ))}
-                </ul>
-              </div>
-            ))}
+
+            <div>
+              <h4 className="mb-4 text-sm font-semibold text-white">Explore</h4>
+              <ul className="space-y-2">
+                <li>
+                  <a href="#features" className="text-sm text-slate-400 hover:text-white">
+                    Features
+                  </a>
+                </li>
+                <li>
+                  <Link href="/register" className="text-sm text-slate-400 hover:text-white">
+                    Create a demo account
+                  </Link>
+                </li>
+                <li>
+                  <Link href="/login" className="text-sm text-slate-400 hover:text-white">
+                    Sign in
+                  </Link>
+                </li>
+              </ul>
+            </div>
+
+            <div>
+              <h4 className="mb-4 text-sm font-semibold text-white">Built With</h4>
+              <ul className="space-y-2 text-sm text-slate-400">
+                <li>Next.js 16 and TypeScript</li>
+                <li>Supabase Auth and Postgres</li>
+                <li>Prisma</li>
+                <li>Stripe and Plaid</li>
+              </ul>
+            </div>
+
+            <div>
+              <h4 className="mb-4 text-sm font-semibold text-white">Demo Status</h4>
+              <ul className="space-y-2 text-sm text-slate-400">
+                <li>Stripe in test mode</li>
+                <li>Plaid in sandbox mode</li>
+                <li>No real money moves</li>
+                <li>No real financial data</li>
+              </ul>
+            </div>
           </div>
-          <div className="mt-8 border-t border-slate-800 pt-8 text-center text-sm text-slate-400">
-            © 2025 NeoBank. All rights reserved.
+          <div className="mt-8 space-y-2 border-t border-slate-800 pt-8 text-center text-sm text-slate-400">
+            <p>
+              NeoBank is a portfolio and demo application. It is not a bank, it
+              is not a licensed or regulated financial institution, and it holds
+              no customer funds. Deposits are not insured because there are no
+              deposits. Please do not enter real financial or identity
+              information.
+            </p>
+            <p>© 2025 NeoBank demo project.</p>
           </div>
         </div>
       </footer>

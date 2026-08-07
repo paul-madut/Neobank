@@ -1,8 +1,9 @@
-import { NextRequest, NextResponse } from 'next/server'
+import { NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase-server'
 import { prisma } from '@/lib/prisma'
+import { serverError } from '@/lib/api-utils'
 
-export async function GET(request: NextRequest) {
+export async function GET() {
   try {
     const supabase = await createClient()
 
@@ -45,13 +46,7 @@ export async function GET(request: NextRequest) {
         createdAt: card.createdAt,
       })),
     })
-  } catch (error: any) {
-    console.error('Error fetching cards:', error)
-    return NextResponse.json(
-      {
-        error: error.message || 'Failed to fetch cards',
-      },
-      { status: 500 }
-    )
+  } catch (error) {
+    return serverError('cards/list', error)
   }
 }

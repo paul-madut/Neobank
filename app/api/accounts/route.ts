@@ -2,8 +2,9 @@ import { NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase-server'
 import { prisma } from '@/lib/prisma'
 import type { GetAccountsResponse } from '@/types/account'
+import { serverError } from '@/lib/api-utils'
 
-export async function GET(request: Request) {
+export async function GET() {
   try {
     // Get authenticated user
     const supabase = await createClient()
@@ -67,11 +68,7 @@ export async function GET(request: Request) {
     }
 
     return NextResponse.json(response)
-  } catch (error: any) {
-    console.error('Error in get accounts:', error)
-    return NextResponse.json(
-      { error: error.message || 'Failed to get accounts' },
-      { status: 500 }
-    )
+  } catch (error) {
+    return serverError('accounts', error)
   }
 }

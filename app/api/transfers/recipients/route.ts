@@ -1,7 +1,18 @@
 import { NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase-server'
 import { prisma } from '@/lib/prisma'
-import { findRecipient, getRecentRecipients } from '@/lib/transfer-utils'
+import {
+  findRecipient,
+  getRecentRecipients,
+  toPublicRecipient,
+} from '@/lib/transfer-utils'
+import {
+  notFound,
+  serverError,
+  tooManyRequests,
+  unauthorized,
+} from '@/lib/api-utils'
+import { RATE_LIMITS, rateLimit } from '@/lib/rate-limit'
 
 export async function GET(request: Request) {
   try {
@@ -12,7 +23,19 @@ export async function GET(request: Request) {
     } = await supabase.auth.getUser()
 
     if (!user) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+      return unauthorized()
+    }
+
+    // Recipient lookup confirms whether an email belongs to a customer, so it
+    // is an enumeration oracle by design. It cannot be removed without breaking
+    // send-by-email, so it is rate limited and the response is trimmed to the
+    // minimum needed to confirm the payee.
+    const limit = rateLimit(
+      `transfers:recipients:${user.id}`,
+      RATE_LIMITS.recipientLookup
+    )
+    if (!limit.allowed) {
+      return tooManyRequests(limit.retryAfterSeconds)
     }
 
     // Find user in database
@@ -21,7 +44,7 @@ export async function GET(request: Request) {
     })
 
     if (!dbUser) {
-      return NextResponse.json({ error: 'User not found' }, { status: 404 })
+      return notFound('User not found')
     }
 
     // Parse query parameters
@@ -37,7 +60,8 @@ export async function GET(request: Request) {
 
     // If query is provided, search for recipient
     if (query && query.trim()) {
-      const recipient = await findRecipient(query.trim())
+      const identifier = query.trim()
+      const recipient = await findRecipient(identifier)
 
       if (!recipient) {
         return NextResponse.json({
@@ -54,16 +78,17 @@ export async function GET(request: Request) {
         })
       }
 
-      return NextResponse.json({ recipients: [recipient] })
+      // Redacted on purpose. The full record holds the recipient's email, real
+      // full name, internal account ID and full account number; none of that is
+      // needed to confirm you are paying the right person.
+      return NextResponse.json({
+        recipients: [toPublicRecipient(recipient, identifier)],
+      })
     }
 
     // If no query or mode, return empty
     return NextResponse.json({ recipients: [] })
-  } catch (error: any) {
-    console.error('Error in recipient search:', error)
-    return NextResponse.json(
-      { error: error.message || 'Failed to search recipients' },
-      { status: 500 }
-    )
+  } catch (error) {
+    return serverError('transfers/recipients', error)
   }
 }

@@ -13,6 +13,8 @@ interface ShimmerButtonProps {
   shimmerDuration?: string;
   background?: string;
   onClick?: () => void;
+  disabled?: boolean;
+  type?: "button" | "submit" | "reset";
 }
 
 export function ShimmerButton({
@@ -24,11 +26,17 @@ export function ShimmerButton({
   shimmerDuration = "2s",
   background = "linear-gradient(135deg, #667eea 0%, #764ba2 100%)",
   onClick,
+  disabled = false,
+  type = "button",
 }: ShimmerButtonProps) {
   return (
     <motion.button
-      whileHover={{ scale: 1.05 }}
-      whileTap={{ scale: 0.95 }}
+      type={type}
+      disabled={disabled}
+      // Suppress the hover and tap animations while disabled, otherwise a
+      // button that cannot be pressed still reacts like one.
+      whileHover={disabled ? undefined : { scale: 1.05 }}
+      whileTap={disabled ? undefined : { scale: 0.95 }}
       style={
         {
           "--shimmer-color": shimmerColor,
@@ -41,13 +49,16 @@ export function ShimmerButton({
       className={cn(
         "group relative inline-flex cursor-pointer items-center justify-center overflow-hidden whitespace-nowrap px-6 py-3 text-white transition-all duration-300 [background:var(--background)] [border-radius:var(--border-radius)]",
         "transform-gpu",
+        "disabled:cursor-not-allowed disabled:opacity-70",
         className,
       )}
       onClick={onClick}
     >
-      <div className="absolute inset-0 overflow-hidden">
-        <div className="absolute inset-0 translate-x-[-100%] animate-[shimmer_var(--shimmer-duration)_infinite] bg-gradient-to-r from-transparent via-[var(--shimmer-color)] to-transparent opacity-50" />
-      </div>
+      {!disabled && (
+        <div className="absolute inset-0 overflow-hidden">
+          <div className="absolute inset-0 translate-x-[-100%] animate-[shimmer_var(--shimmer-duration)_infinite] bg-gradient-to-r from-transparent via-[var(--shimmer-color)] to-transparent opacity-50" />
+        </div>
+      )}
       <span className="relative z-10 flex items-center gap-2">{children}</span>
     </motion.button>
   );

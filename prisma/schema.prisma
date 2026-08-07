@@ -11,7 +11,13 @@ generator client {
 
 datasource db {
   provider  = "postgresql"
-  url = env("DIRECT_URL")
+  // DATABASE_URL is the TRANSACTION pooler (port 6543), used at runtime.
+  // DIRECT_URL is the SESSION pooler (port 5432), used by Prisma Migrate for DDL
+  // and advisory locks. On Supabase's free tier do NOT point DIRECT_URL at the
+  // "Direct connection" string: that host is IPv6-only and Vercel builds have no
+  // IPv6 egress. See .env.example for the full explanation.
+  url       = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
 }
 
 // ============================================
@@ -19,27 +25,34 @@ datasource db {
 // ============================================
 
 model User {
-  id              String    @id @default(uuid())
-  supabaseId      String    @unique // Supabase Auth user ID
-  email           String    @unique
-  firstName       String?
-  lastName        String?
-  kycStatus       KycStatus @default(PENDING)
-  kycProviderId   String?   // Stripe Identity verification ID
-  isAdmin             Boolean   @default(false) // Admin access flag
-  stripeCustomerId    String?   // Stripe customer ID for payments
-  stripeCardholderId  String?   @unique // Stripe Issuing cardholder ID
-  createdAt           DateTime  @default(now())
-  updatedAt       DateTime  @updatedAt
+  id                 String    @id @default(uuid())
+  supabaseId         String    @unique // Supabase Auth user ID
+  email              String    @unique
+  firstName          String?
+  lastName           String?
+  kycStatus          KycStatus @default(PENDING)
+  kycProviderId      String? // Stripe Identity verification ID
+  isAdmin            Boolean   @default(false) // Admin access flag
+  stripeCustomerId   String? // Stripe customer ID for payments
+  stripeCardholderId String?   @unique // Stripe Issuing cardholder ID
+  // Throwaway account created by the one-click demo. Each visitor gets their
+  // own, so a stranger can only ever break their own copy, and it is deleted
+  // after demoExpiresAt.
+  isDemo             Boolean   @default(false)
+  demoExpiresAt      DateTime?
+  createdAt          DateTime  @default(now())
+  updatedAt          DateTime  @updatedAt
 
-  accounts        Account[]
-  transactions    Transaction[]
-  externalAccounts ExternalAccount[]
-  achTransfers    ACHTransfer[]
-  cards           Card[]
+  accounts             Account[]
+  transactions         Transaction[]
+  externalAccounts     ExternalAccount[]
+  achTransfers         ACHTransfer[]
+  cards                Card[]
+  reviewedTransactions Transaction[]     @relation("TransactionReviewer")
 
   @@index([supabaseId])
   @@index([email])
+  @@index([isDemo, demoExpiresAt])
 }
 
 enum KycStatus {
@@ -54,22 +67,27 @@ enum KycStatus {
 // ============================================
 
 model Account {
-  id              String        @id @default(uuid())
-  userId          String
-  accountType     AccountType   @default(CHECKING)
-  accountNumber   String        @unique
-  routingNumber   String        @default("021000021") // Mock routing number
-  balance         Decimal       @default(0.00) @db.Decimal(19, 4)
-  currency        String        @default("USD")
-  status          AccountStatus @default(ACTIVE)
-  stripeAccountId String?       // Stripe Treasury account ID (future)
-  createdAt       DateTime      @default(now())
-  updatedAt       DateTime      @updatedAt
+  id              String             @id @default(uuid())
+  // Null for internal system (house) accounts, which are not owned by a customer.
+  userId          String?
+  accountType     AccountType        @default(CHECKING)
+  accountNumber   String             @unique
+  routingNumber   String             @default("021000021") // Mock routing number
+  balance         Decimal            @default(0.00) @db.Decimal(19, 4)
+  currency        String             @default("USD")
+  status          AccountStatus      @default(ACTIVE)
+  stripeAccountId String? // Stripe Treasury account ID (future)
+  // Set only on internal system accounts. Unique so there is exactly one of each kind.
+  // These are the contra accounts that make every movement of money balance to zero.
+  systemType      SystemAccountType? @unique
+  createdAt       DateTime           @default(now())
+  updatedAt       DateTime           @updatedAt
 
-  user            User          @relation(fields: [userId], references: [id], onDelete: Cascade)
-  ledgerEntries   LedgerEntry[]
+  user             User?         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  ledgerEntries    LedgerEntry[]
   transactionsFrom Transaction[] @relation("FromAccount")
   transactionsTo   Transaction[] @relation("ToAccount")
+  achTransfers     ACHTransfer[] @relation("ACHInternalAccount")
 
   @@index([userId])
   @@index([accountNumber])
@@ -78,6 +96,15 @@ model Account {
 enum AccountType {
   CHECKING
   SAVINGS
+  SYSTEM // Internal house account, never customer facing
+}
+
+// Internal house accounts. Money entering or leaving the neobank has to come from
+// or go to somewhere, so each external rail gets a settlement account. The sum of
+// every account balance (customer + system) is always zero.
+enum SystemAccountType {
+  ACH_SETTLEMENT // Funds in transit to and from external banks over ACH
+  CARD_SETTLEMENT // Funds in transit to and from the card network
 }
 
 enum AccountStatus {
@@ -91,28 +118,28 @@ enum AccountStatus {
 // ============================================
 
 model ExternalAccount {
-  id                  String   @id @default(uuid())
-  userId              String
-  plaidAccountId      String   @unique
-  plaidItemId         String
-  plaidAccessToken    String   // Encrypted in production
-  institutionId       String
-  institutionName     String
-  accountName         String?
-  officialName        String?
-  mask                String   // Last 4 digits
-  type                String   // checking, savings, etc.
-  subtype             String?
-  availableBalance    Decimal? @db.Decimal(19, 4)
-  currentBalance      Decimal? @db.Decimal(19, 4)
-  currency            String   @default("USD")
-  verificationStatus  VerificationStatus @default(PENDING)
-  lastSynced          DateTime @default(now())
-  createdAt           DateTime @default(now())
-  updatedAt           DateTime @updatedAt
+  id                 String             @id @default(uuid())
+  userId             String
+  plaidAccountId     String             @unique
+  plaidItemId        String
+  plaidAccessToken   String // PLAINTEXT. Needs application-level encryption before this could hold a real credential.
+  institutionId      String
+  institutionName    String
+  accountName        String?
+  officialName       String?
+  mask               String // Last 4 digits
+  type               String // checking, savings, etc.
+  subtype            String?
+  availableBalance   Decimal?           @db.Decimal(19, 4)
+  currentBalance     Decimal?           @db.Decimal(19, 4)
+  currency           String             @default("USD")
+  verificationStatus VerificationStatus @default(PENDING)
+  lastSynced         DateTime           @default(now())
+  createdAt          DateTime           @default(now())
+  updatedAt          DateTime           @updatedAt
 
-  user                User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-  achTransfers        ACHTransfer[]
+  user         User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  achTransfers ACHTransfer[]
 
   @@index([userId])
   @@index([plaidItemId])
@@ -129,25 +156,31 @@ enum VerificationStatus {
 // ============================================
 
 model Transaction {
-  id                String            @id @default(uuid())
-  userId            String
-  fromAccountId     String?
-  toAccountId       String?
-  amount            Decimal           @db.Decimal(19, 4)
-  currency          String            @default("USD")
-  type              TransactionType
-  status            TransactionStatus @default(PENDING)
-  description       String?
-  metadata          Json?             // Stripe/Plaid metadata
-  idempotencyKey    String            @unique
-  externalId        String?           // Stripe/Plaid transaction ID
-  createdAt         DateTime          @default(now())
-  updatedAt         DateTime          @updatedAt
+  id               String            @id @default(uuid())
+  userId           String
+  fromAccountId    String?
+  toAccountId      String?
+  amount           Decimal           @db.Decimal(19, 4)
+  currency         String            @default("USD")
+  type             TransactionType
+  status           TransactionStatus @default(PENDING)
+  description      String?
+  metadata         Json? // Stripe/Plaid metadata
+  idempotencyKey   String            @unique
+  externalId       String? // Stripe/Plaid transaction ID
+  // Manual review trail for transfers held above PENDING_REVIEW_THRESHOLD.
+  reviewedByUserId String?
+  reviewedAt       DateTime?
+  reviewNote       String?
+  createdAt        DateTime          @default(now())
+  updatedAt        DateTime          @updatedAt
 
-  user              User              @relation(fields: [userId], references: [id], onDelete: Cascade)
-  fromAccount       Account?          @relation("FromAccount", fields: [fromAccountId], references: [id])
-  toAccount         Account?          @relation("ToAccount", fields: [toAccountId], references: [id])
-  ledgerEntries     LedgerEntry[]
+  user          User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  reviewedBy    User?         @relation("TransactionReviewer", fields: [reviewedByUserId], references: [id])
+  fromAccount   Account?      @relation("FromAccount", fields: [fromAccountId], references: [id])
+  toAccount     Account?      @relation("ToAccount", fields: [toAccountId], references: [id])
+  ledgerEntries LedgerEntry[]
+  achTransfer   ACHTransfer?
 
   @@index([userId, createdAt])
   @@index([status])
@@ -160,8 +193,8 @@ enum TransactionType {
   ACH_CREDIT
   CARD_AUTHORIZATION
   CARD_CAPTURE
-  CARD_PURCHASE  // Virtual card purchase transaction
-  CARD_REFUND    // Virtual card refund
+  CARD_PURCHASE // Virtual card purchase transaction
+  CARD_REFUND // Virtual card refund
   REFUND
   FEE
   DEPOSIT
@@ -181,17 +214,17 @@ enum TransactionStatus {
 // ============================================
 
 model LedgerEntry {
-  id              String          @id @default(uuid())
-  accountId       String
-  transactionId   String
-  entryType       EntryType
-  amount          Decimal         @db.Decimal(19, 4)
-  balanceAfter    Decimal         @db.Decimal(19, 4)
-  description     String
-  createdAt       DateTime        @default(now())
+  id            String    @id @default(uuid())
+  accountId     String
+  transactionId String
+  entryType     EntryType
+  amount        Decimal   @db.Decimal(19, 4)
+  balanceAfter  Decimal   @db.Decimal(19, 4)
+  description   String
+  createdAt     DateTime  @default(now())
 
-  account         Account         @relation(fields: [accountId], references: [id], onDelete: Cascade)
-  transaction     Transaction     @relation(fields: [transactionId], references: [id], onDelete: Cascade)
+  account     Account     @relation(fields: [accountId], references: [id], onDelete: Cascade)
+  transaction Transaction @relation(fields: [transactionId], references: [id], onDelete: Cascade)
 
   @@index([accountId, createdAt])
   @@index([transactionId])
@@ -207,42 +240,45 @@ enum EntryType {
 // ============================================
 
 model ACHTransfer {
-  id                String             @id @default(uuid())
+  id                String       @id @default(uuid())
   userId            String
   externalAccountId String
   internalAccountId String
-  transactionId     String?            @unique // Linked internal transaction
+  transactionId     String?      @unique // Linked internal transaction
   direction         ACHDirection
-  amount            Decimal            @db.Decimal(19, 4)
-  currency          String             @default("USD")
-  status            ACHStatus          @default(PENDING)
-  plaidTransferId   String?            @unique // Plaid transfer ID
+  amount            Decimal      @db.Decimal(19, 4)
+  currency          String       @default("USD")
+  status            ACHStatus    @default(PENDING)
+  plaidTransferId   String?      @unique // Plaid transfer ID
   failureReason     String?
-  metadata          Json?              // Plaid transfer metadata
-  expectedDate      DateTime?          // Expected settlement date
-  createdAt         DateTime           @default(now())
-  updatedAt         DateTime           @updatedAt
+  metadata          Json? // Plaid transfer metadata
+  expectedDate      DateTime? // Expected settlement date
+  createdAt         DateTime     @default(now())
+  updatedAt         DateTime     @updatedAt
 
-  user              User               @relation(fields: [userId], references: [id], onDelete: Cascade)
-  externalAccount   ExternalAccount    @relation(fields: [externalAccountId], references: [id])
+  user            User            @relation(fields: [userId], references: [id], onDelete: Cascade)
+  externalAccount ExternalAccount @relation(fields: [externalAccountId], references: [id])
+  internalAccount Account         @relation("ACHInternalAccount", fields: [internalAccountId], references: [id])
+  transaction     Transaction?    @relation(fields: [transactionId], references: [id])
 
   @@index([userId, createdAt])
   @@index([status])
   @@index([plaidTransferId])
+  @@index([internalAccountId])
 }
 
 enum ACHDirection {
-  DEPOSIT    // From external bank to neobank (credit)
+  DEPOSIT // From external bank to neobank (credit)
   WITHDRAWAL // From neobank to external bank (debit)
 }
 
 enum ACHStatus {
-  PENDING      // Transfer initiated, awaiting Plaid
-  PROCESSING   // Transfer in progress
-  COMPLETED    // Successfully settled
-  FAILED       // Transfer failed
-  CANCELLED    // User cancelled
-  RETURNED     // ACH return (insufficient funds, etc.)
+  PENDING // Transfer initiated, awaiting Plaid
+  PROCESSING // Transfer in progress
+  COMPLETED // Successfully settled
+  FAILED // Transfer failed
+  CANCELLED // User cancelled
+  RETURNED // ACH return (insufficient funds, etc.)
 }
 
 // ============================================
@@ -250,21 +286,21 @@ enum ACHStatus {
 // ============================================
 
 model Card {
-  id                String      @id @default(uuid())
-  userId            String
-  stripeCardId      String      @unique // Stripe Issuing card ID
-  last4             String      // Last 4 digits
-  brand             String      @default("visa")
-  expiryMonth       Int
-  expiryYear        Int
-  status            CardStatus  @default(ACTIVE)
-  spendingLimit     Decimal?    @db.Decimal(19, 4) // Per-transaction limit
-  monthlyLimit      Decimal?    @db.Decimal(19, 4) // Monthly spending limit
-  nickname          String?     // User-defined card name
-  createdAt         DateTime    @default(now())
-  updatedAt         DateTime    @updatedAt
+  id            String     @id @default(uuid())
+  userId        String
+  stripeCardId  String     @unique // Stripe Issuing card ID
+  last4         String // Last 4 digits
+  brand         String     @default("visa")
+  expiryMonth   Int
+  expiryYear    Int
+  status        CardStatus @default(ACTIVE)
+  spendingLimit Decimal?   @db.Decimal(19, 4) // Per-transaction limit
+  monthlyLimit  Decimal?   @db.Decimal(19, 4) // Monthly spending limit
+  nickname      String? // User-defined card name
+  createdAt     DateTime   @default(now())
+  updatedAt     DateTime   @updatedAt
 
-  user              User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@index([userId])
   @@index([stripeCardId])
@@ -274,4 +310,23 @@ enum CardStatus {
   ACTIVE
   FROZEN
   CANCELLED
+}
+
+// ============================================
+// WEBHOOK DELIVERY DEDUPLICATION
+// ============================================
+
+// Payment providers guarantee at-least-once webhook delivery, so the same event
+// can and will arrive more than once. Every handler claims its event ID here
+// before doing any work; the unique constraint makes a replay a no-op rather
+// than a second ledger entry.
+model ProcessedWebhookEvent {
+  id          String   @id @default(uuid())
+  provider    String // "stripe_issuing" | "stripe_identity" | "plaid"
+  eventId     String // Provider's own event ID
+  eventType   String?
+  processedAt DateTime @default(now())
+
+  @@unique([provider, eventId])
+  @@index([processedAt])
 }

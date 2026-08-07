@@ -24,8 +24,8 @@ export function SocialAuthButtons() {
           setError(authError.message)
         }
       }
-    } catch (err: any) {
-      setError(err.message || "An error occurred")
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "An error occurred")
     }
   }
 
@@ -45,8 +45,8 @@ export function SocialAuthButtons() {
           setError(authError.message)
         }
       }
-    } catch (err: any) {
-      setError(err.message || "An error occurred")
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "An error occurred")
     }
   }
 

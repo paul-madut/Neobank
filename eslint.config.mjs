@@ -1,18 +1,43 @@
-import { FlatCompat } from "@eslint/eslintrc";
 import js from "@eslint/js";
-import path from "path";
-import { fileURLToPath } from "url";
+import nextCoreWebVitals from "eslint-config-next/core-web-vitals";
+import nextTypeScript from "eslint-config-next/typescript";
 
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = path.dirname(__filename);
-
-const compat = new FlatCompat({
-  baseDirectory: __dirname,
-  recommendedConfig: js.configs.recommended,
-});
-
+// eslint-config-next 16 ships native flat configs, so these are imported
+// directly. The previous config went through FlatCompat, which throws on this
+// version, meaning lint had not run at all.
 const eslintConfig = [
-  ...compat.extends("next/core-web-vitals", "next/typescript"),
+  {
+    ignores: [
+      ".next/**",
+      "node_modules/**",
+      "next-env.d.ts",
+      "prisma/migrations/**",
+    ],
+  },
+  js.configs.recommended,
+  ...nextCoreWebVitals,
+  ...nextTypeScript,
+  {
+    files: ["**/*.ts", "**/*.tsx"],
+    rules: {
+      // Unused arguments are common in typed callbacks and route signatures.
+      // Allow the conventional leading-underscore opt-out.
+      "@typescript-eslint/no-unused-vars": [
+        "error",
+        {
+          argsIgnorePattern: "^_",
+          varsIgnorePattern: "^_",
+          caughtErrorsIgnorePattern: "^_",
+        },
+      ],
+    },
+  },
+  {
+    files: ["scripts/**/*.{ts,js,mjs}", "tests/**/*.ts"],
+    rules: {
+      "no-console": "off",
+    },
+  },
 ];
 
 export default eslintConfig;

@@ -1,0 +1,86 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+
+    services:
+      # The test suite falls back to PGlite when TEST_DATABASE_URL is unset, but
+      # PGlite serves a single connection. CI runs against real Postgres so the
+      # genuinely-parallel double-spend test actually executes.
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: neobank_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+
+    env:
+      DATABASE_URL: postgresql://postgres:postgres@localhost:5432/neobank_test
+      DIRECT_URL: postgresql://postgres:postgres@localhost:5432/neobank_test
+      TEST_DATABASE_URL: postgresql://postgres:postgres@localhost:5432/neobank_test
+      # Placeholders. Nothing in CI talks to a real provider, but modules that
+      # read these at import time need them to be present.
+      NEXT_PUBLIC_SUPABASE_URL: https://example.supabase.co
+      NEXT_PUBLIC_SUPABASE_ANON_KEY: ci-anon-key
+      SUPABASE_SERVICE_ROLE_KEY: ci-service-role-key
+      STRIPE_SECRET_KEY: sk_test_ci
+      STRIPE_WEBHOOK_SECRET: whsec_ci
+      NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY: pk_test_ci
+      PLAID_CLIENT_ID: ci-plaid-client-id
+      PLAID_SECRET: ci-plaid-secret
+      PLAID_ENV: sandbox
+      NEXT_PUBLIC_APP_URL: http://localhost:3000
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10.12.1
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: pnpm
+
+      # postinstall runs prisma generate, so the client exists from here on.
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Verify the committed migration matches the schema
+        run: |
+          pnpm exec prisma migrate diff \
+            --from-migrations prisma/migrations \
+            --to-schema-datamodel prisma/schema.prisma \
+            --shadow-database-url "$DATABASE_URL" \
+            --exit-code
+        continue-on-error: false
+
+      - name: Typecheck
+        run: pnpm typecheck
+
+      - name: Lint
+        run: pnpm lint
+
+      - name: Test
+        run: pnpm test
+
+      - name: Build
+        run: pnpm build

@@ -9,17 +9,30 @@ interface MeteorsProps {
   className?: string;
 }
 
+function generateMeteorStyles(count: number): Array<React.CSSProperties> {
+  return Array.from({ length: count }, () => ({
+    top: Math.floor(Math.random() * 400 - 400) + "px",
+    left: Math.floor(Math.random() * window.innerWidth) + "px",
+    animationDelay: Math.random() * 0.8 + "s",
+    animationDuration: Math.floor(Math.random() * 8 + 2) + "s",
+  }));
+}
+
 export function Meteors({ number = 20, className }: MeteorsProps) {
   const [meteorStyles, setMeteorStyles] = useState<Array<React.CSSProperties>>([]);
 
   useEffect(() => {
-    const styles = new Array(number).fill(true).map(() => ({
-      top: Math.floor(Math.random() * 400 - 400) + "px",
-      left: Math.floor(Math.random() * window.innerWidth) + "px",
-      animationDelay: Math.random() * 0.8 + "s",
-      animationDuration: Math.floor(Math.random() * 8 + 2) + "s",
-    }));
-    setMeteorStyles(styles);
+    // The positions depend on Math.random() and window.innerWidth, so they can
+    // only be produced on the client - computing them during render would make
+    // the server markup and the hydrated markup disagree. Scheduling the state
+    // update on the next frame keeps it out of the effect body, so mounting
+    // commits once and paints, instead of immediately cascading a second
+    // synchronous render.
+    const frame = requestAnimationFrame(() => {
+      setMeteorStyles(generateMeteorStyles(number));
+    });
+
+    return () => cancelAnimationFrame(frame);
   }, [number]);
 
   return (

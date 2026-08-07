@@ -6,6 +6,7 @@ import {
   updateCardSpendingLimits,
   getCardDetails,
 } from '@/lib/stripe-issuing-utils'
+import { serverError } from '@/lib/api-utils'
 
 export async function PATCH(
   request: NextRequest,
@@ -149,14 +150,8 @@ export async function PATCH(
       { error: 'Invalid action. Supported actions: freeze, unfreeze, update_limits, update_nickname' },
       { status: 400 }
     )
-  } catch (error: any) {
-    console.error('Error updating card:', error)
-    return NextResponse.json(
-      {
-        error: error.message || 'Failed to update card',
-      },
-      { status: 500 }
-    )
+  } catch (error) {
+    return serverError('cards/[id]', error)
   }
 }
 
@@ -225,14 +220,8 @@ export async function DELETE(
       success: true,
       message: 'Card cancelled successfully',
     })
-  } catch (error: any) {
-    console.error('Error deleting card:', error)
-    return NextResponse.json(
-      {
-        error: error.message || 'Failed to cancel card',
-      },
-      { status: 500 }
-    )
+  } catch (error) {
+    return serverError('cards/[id]', error)
   }
 }
 
@@ -308,13 +297,7 @@ export async function GET(
         nickname: card.nickname,
       },
     })
-  } catch (error: any) {
-    console.error('Error retrieving card details:', error)
-    return NextResponse.json(
-      {
-        error: error.message || 'Failed to retrieve card details',
-      },
-      { status: 500 }
-    )
+  } catch (error) {
+    return serverError('cards/[id]', error)
   }
 }

@@ -82,9 +82,11 @@ export function CreateCardForm({ onCardCreated }: CreateCardFormProps) {
       if (onCardCreated) {
         onCardCreated()
       }
-    } catch (error: any) {
+    } catch (error) {
       console.error("Error creating card:", error)
-      toast.error(error.message || "Failed to create card")
+      toast.error(
+        error instanceof Error ? error.message : "Failed to create card"
+      )
     } finally {
       setCreating(false)
     }

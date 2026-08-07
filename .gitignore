@@ -36,8 +36,11 @@ pnpm-debug.log*
 next-env.d.ts
 
 # prisma
+# Note: prisma/migrations/ IS committed on purpose, migration_lock.toml included.
+# Without the lock file a fresh clone cannot create the database and Prisma warns
+# about a missing provider on every migrate command.
 /lib/generated/prisma
-prisma/migrations/migration_lock.toml
 
-# sentry
-.sentryclirc
+# test artifacts
+/coverage
+

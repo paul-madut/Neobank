@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect, useState } from "react"
+import { useCallback, useEffect, useState } from "react"
 import { useRouter } from "next/navigation"
 import { Button } from "@/components/ui/button"
 import { Loader2, CheckCircle, ArrowLeft } from "lucide-react"
@@ -9,15 +9,13 @@ import Link from "next/link"
 export default function KYCPendingPage() {
   const router = useRouter()
   const [checking, setChecking] = useState(false)
-  const [status, setStatus] = useState<string | null>(null)
 
-  const checkStatus = async () => {
+  const checkStatus = useCallback(async () => {
     setChecking(true)
     try {
       const response = await fetch("/api/kyc/status")
       if (response.ok) {
         const data = await response.json()
-        setStatus(data.kycStatus)
 
         // If verified, redirect to success page
         if (data.kycStatus === "VERIFIED") {
@@ -29,7 +27,7 @@ export default function KYCPendingPage() {
     } finally {
       setChecking(false)
     }
-  }
+  }, [router])
 
   useEffect(() => {
     // Check status immediately
@@ -39,7 +37,7 @@ export default function KYCPendingPage() {
     const interval = setInterval(checkStatus, 5000)
 
     return () => clearInterval(interval)
-  }, [])
+  }, [checkStatus])
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-zinc-50 via-zinc-100 to-zinc-50 dark:from-zinc-950 dark:via-zinc-900 dark:to-zinc-950 flex items-center justify-center px-4">
@@ -61,7 +59,7 @@ export default function KYCPendingPage() {
         </h1>
 
         <p className="text-lg text-zinc-600 dark:text-zinc-400 mb-8">
-          We're reviewing your documents. This usually takes 1-5 minutes.
+          We&apos;re reviewing your documents. This usually takes 1-5 minutes.
         </p>
 
         <div className="mb-8 p-6 rounded-lg bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800">
@@ -98,7 +96,7 @@ export default function KYCPendingPage() {
         </Button>
 
         <p className="mt-6 text-sm text-zinc-500 dark:text-zinc-400">
-          You'll be notified once verification is complete. Feel free to close this
+          You&apos;ll be notified once verification is complete. Feel free to close this
           page.
         </p>
       </div>

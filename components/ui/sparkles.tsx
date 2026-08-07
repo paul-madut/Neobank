@@ -65,7 +65,7 @@ export const SparklesCore = ({
         resize: {
           enable: true,
           delay: 0.5,
-        } as any,
+        },
       },
     },
     particles: {
@@ -100,7 +100,7 @@ export const SparklesCore = ({
           speed: 1,
           startValue: "random",
           destroy: "none",
-        } as any,
+        },
       },
       shape: {
         type: "circle",

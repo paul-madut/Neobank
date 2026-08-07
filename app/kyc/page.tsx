@@ -29,5 +29,5 @@ export default async function KYCPage() {
     console.error("Error fetching KYC status:", error)
   }
 
-  return <KYCVerificationClient kycStatus={kycStatus} userEmail={user.email || ""} />
+  return <KYCVerificationClient kycStatus={kycStatus} />
 }

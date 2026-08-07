@@ -1,38 +1,180 @@
 @import "tailwindcss";
 
+/*
+  Dark mode.
+
+  The codebase is written for class-based dark mode (the old tailwind.config.ts
+  set `darkMode: "class"`), but nothing in the app ever puts a `.dark` class on
+  <html> - there is no theme provider or toggle. A class-only `dark` variant
+  would therefore pin the app to light mode forever and kill all 35 files worth
+  of `dark:` utilities.
+
+  So `dark` matches BOTH:
+    - the OS preference (current behaviour, keeps the app working today), and
+    - an explicit `.dark` class (so a theme toggle can be dropped in later).
+  An explicit `.light` class opts back out of the OS preference.
+*/
+@custom-variant dark {
+  @media (prefers-color-scheme: dark) {
+    &:where(:not(.light, .light *)) {
+      @slot;
+    }
+  }
+  &:where(.dark, .dark *) {
+    @slot;
+  }
+}
+
+/*
+  Design tokens (light). Full color values, not bare HSL triplets, so that
+  Tailwind v4 opacity modifiers like `bg-primary/90` can color-mix them.
+*/
 :root {
+  color-scheme: light;
+
   --background: #ffffff;
   --foreground: #171717;
-  --primary: 240 5.9% 10%;
-  --primary-foreground: 0 0% 98%;
-  --accent: 240 4.8% 95.9%;
-  --accent-foreground: 240 5.9% 10%;
+
+  --card: hsl(0 0% 100%);
+  --card-foreground: hsl(240 10% 3.9%);
+  --popover: hsl(0 0% 100%);
+  --popover-foreground: hsl(240 10% 3.9%);
+  --primary: hsl(240 5.9% 10%);
+  --primary-foreground: hsl(0 0% 98%);
+  --secondary: hsl(240 4.8% 95.9%);
+  --secondary-foreground: hsl(240 5.9% 10%);
+  --muted: hsl(240 4.8% 95.9%);
+  --muted-foreground: hsl(240 3.8% 46.1%);
+  --accent: hsl(240 4.8% 95.9%);
+  --accent-foreground: hsl(240 5.9% 10%);
+  --destructive: hsl(0 84.2% 60.2%);
+  --destructive-foreground: hsl(0 0% 98%);
+  --border: hsl(240 5.9% 90%);
+  --input: hsl(240 5.9% 90%);
+  --ring: hsl(240 10% 3.9%);
+
+  /* Legacy token, kept for compatibility. */
   --neutral-700: 240 3.7% 15.9%;
 }
 
+/* Design tokens (dark), applied from the OS preference. */
 @media (prefers-color-scheme: dark) {
-  :root {
+  :root:not(.light) {
+    color-scheme: dark;
+
     --background: #0a0a0a;
     --foreground: #ededed;
-    --primary: 0 0% 98%;
-    --primary-foreground: 240 5.9% 10%;
-    --accent: 240 3.7% 15.9%;
-    --accent-foreground: 0 0% 98%;
+
+    --card: hsl(240 10% 3.9%);
+    --card-foreground: hsl(0 0% 98%);
+    --popover: hsl(240 10% 3.9%);
+    --popover-foreground: hsl(0 0% 98%);
+    --primary: hsl(0 0% 98%);
+    --primary-foreground: hsl(240 5.9% 10%);
+    --secondary: hsl(240 3.7% 15.9%);
+    --secondary-foreground: hsl(0 0% 98%);
+    --muted: hsl(240 3.7% 15.9%);
+    --muted-foreground: hsl(240 5% 64.9%);
+    --accent: hsl(240 3.7% 15.9%);
+    --accent-foreground: hsl(0 0% 98%);
+    --destructive: hsl(0 62.8% 30.6%);
+    --destructive-foreground: hsl(0 0% 98%);
+    --border: hsl(240 3.7% 15.9%);
+    --input: hsl(240 3.7% 15.9%);
+    --ring: hsl(240 4.9% 83.9%);
+
     --neutral-700: 240 5.2% 33.9%;
   }
-
 }
 
+/* Design tokens (dark), applied from an explicit `.dark` class. */
+.dark {
+  color-scheme: dark;
+
+  --background: #0a0a0a;
+  --foreground: #ededed;
+
+  --card: hsl(240 10% 3.9%);
+  --card-foreground: hsl(0 0% 98%);
+  --popover: hsl(240 10% 3.9%);
+  --popover-foreground: hsl(0 0% 98%);
+  --primary: hsl(0 0% 98%);
+  --primary-foreground: hsl(240 5.9% 10%);
+  --secondary: hsl(240 3.7% 15.9%);
+  --secondary-foreground: hsl(0 0% 98%);
+  --muted: hsl(240 3.7% 15.9%);
+  --muted-foreground: hsl(240 5% 64.9%);
+  --accent: hsl(240 3.7% 15.9%);
+  --accent-foreground: hsl(0 0% 98%);
+  --destructive: hsl(0 62.8% 30.6%);
+  --destructive-foreground: hsl(0 0% 98%);
+  --border: hsl(240 3.7% 15.9%);
+  --input: hsl(240 3.7% 15.9%);
+  --ring: hsl(240 4.9% 83.9%);
+
+  --neutral-700: 240 5.2% 33.9%;
+}
+
+/*
+  Expose the tokens to Tailwind. `inline` makes the generated utilities
+  reference `var(--primary)` directly, so the light/dark overrides above take
+  effect wherever the `.dark` class lands in the tree.
+*/
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-popover: var(--popover);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-destructive: var(--destructive);
+  --color-destructive-foreground: var(--destructive-foreground);
+  --color-border: var(--border);
+  --color-input: var(--input);
+  --color-ring: var(--ring);
+}
+
+@theme {
+  --shadow-input: 0px 2px 3px -1px rgba(0, 0, 0, 0.1),
+    0px 1px 0px 0px rgba(25, 28, 33, 0.02), 0px 0px 0px 1px rgba(25, 28, 33, 0.08);
+
+  --animate-meteor: meteor 5s linear infinite;
+  --animate-shimmer: shimmer 2s linear infinite;
+}
+
+@layer base {
+  /*
+    Tailwind v4 resets every border to `currentColor`; v3 defaulted to a light
+    gray. Components here were written against v3 and use a bare `border`
+    (Card, DialogContent, Badge), so restore a token-driven default.
+  */
+  *,
+  ::after,
+  ::before,
+  ::backdrop,
+  ::file-selector-button {
+    border-color: var(--color-border);
+  }
 
   html {
-  scroll-behavior: smooth;
-}
-body {
-  color: var(--foreground);
-  background: var(--background);
-  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
-  -webkit-font-smoothing: antialiased;
-  -moz-osx-font-smoothing: grayscale;
+    scroll-behavior: smooth;
+  }
+
+  body {
+    color: var(--foreground);
+    background: var(--background);
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+  }
 }
 
 @layer utilities {
@@ -46,11 +188,40 @@ body {
   }
 }
 
+/*
+  Keyframes live at the top level rather than inside `@theme` because
+  ShimmerButton consumes `shimmer` through an arbitrary value
+  (`animate-[shimmer_var(--shimmer-duration)_infinite]`), which does not pull in
+  keyframes registered against a `--animate-*` theme key.
+*/
 @keyframes gradient-x {
   0%, 100% {
     background-position: 0% 50%;
   }
   50% {
     background-position: 100% 50%;
+  }
+}
+
+@keyframes meteor {
+  0% {
+    transform: rotate(215deg) translateX(0);
+    opacity: 1;
+  }
+  70% {
+    opacity: 1;
+  }
+  100% {
+    transform: rotate(215deg) translateX(-500px);
+    opacity: 0;
+  }
+}
+
+@keyframes shimmer {
+  from {
+    transform: translateX(-100%);
+  }
+  to {
+    transform: translateX(100%);
   }
 }

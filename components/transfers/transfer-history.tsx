@@ -3,23 +3,16 @@
 import { useEffect, useState } from 'react'
 import { Button } from '@/components/ui/button'
 import { Loader2, Send, Clock } from 'lucide-react'
+import { initials } from '@/lib/utils'
+import type { PublicRecipient } from '@/types/account'
 
-interface RecipientInfo {
-  id: string
-  email: string
-  firstName: string
-  lastName: string
-  accountId: string
-  accountNumber: string
-  accountStatus: string
-}
 
 interface TransferHistoryProps {
-  onQuickTransfer?: (recipient: RecipientInfo) => void
+  onQuickTransfer?: (recipient: PublicRecipient) => void
 }
 
 export function TransferHistory({ onQuickTransfer }: TransferHistoryProps) {
-  const [recentRecipients, setRecentRecipients] = useState<RecipientInfo[]>([])
+  const [recentRecipients, setRecentRecipients] = useState<PublicRecipient[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
 
@@ -39,9 +32,11 @@ export function TransferHistory({ onQuickTransfer }: TransferHistoryProps) {
       const data = await response.json()
       setRecentRecipients(data.recipients || [])
       setError(null)
-    } catch (err: any) {
+    } catch (err) {
       console.error('Error fetching recent recipients:', err)
-      setError(err.message || 'Failed to load recent recipients')
+      setError(
+        err instanceof Error ? err.message : 'Failed to load recent recipients'
+      )
     } finally {
       setLoading(false)
     }
@@ -96,20 +91,19 @@ export function TransferHistory({ onQuickTransfer }: TransferHistoryProps) {
       <div className="space-y-2">
         {recentRecipients.map((recipient) => (
           <div
-            key={recipient.id}
+            key={recipient.identifier}
             className="flex items-center justify-between p-3 rounded-lg border border-zinc-200 dark:border-zinc-800 hover:bg-zinc-50 dark:hover:bg-zinc-800/50 transition-colors"
           >
             <div className="flex items-center gap-3 flex-1 min-w-0">
               <div className="h-10 w-10 rounded-full bg-zinc-200 dark:bg-zinc-700 flex items-center justify-center text-zinc-600 dark:text-zinc-300 font-medium flex-shrink-0">
-                {recipient.firstName[0]}
-                {recipient.lastName[0]}
+                {initials(recipient.displayName)}
               </div>
               <div className="flex-1 min-w-0">
                 <div className="font-medium text-sm text-zinc-900 dark:text-white truncate">
-                  {recipient.firstName} {recipient.lastName}
+                  {recipient.displayName}
                 </div>
                 <div className="text-xs text-zinc-500 dark:text-zinc-400 truncate">
-                  {recipient.email}
+                  {recipient.maskedAccountNumber}
                 </div>
               </div>
             </div>

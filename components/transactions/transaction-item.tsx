@@ -22,9 +22,12 @@ export function TransactionItem({ transaction, onClick }: TransactionItemProps) 
       ? parseFloat(transaction.amount)
       : transaction.amount
 
-  // Determine if this is a credit (money in) or debit (money out)
-  const isCredit = ["DEPOSIT", "ACH_CREDIT", "REFUND"].includes(transaction.type)
-  const isDebit = ["WITHDRAWAL", "ACH_DEBIT", "CARD_AUTHORIZATION", "CARD_CAPTURE", "FEE"].includes(transaction.type)
+  // Determine if this is a credit (money in) or debit (money out).
+  // CARD_PURCHASE and CARD_REFUND are what the Stripe Issuing webhook writes;
+  // they were missing from both lists, so card activity rendered with no sign
+  // and neutral colouring.
+  const isCredit = ["DEPOSIT", "ACH_CREDIT", "REFUND", "CARD_REFUND"].includes(transaction.type)
+  const isDebit = ["WITHDRAWAL", "ACH_DEBIT", "CARD_AUTHORIZATION", "CARD_CAPTURE", "CARD_PURCHASE", "FEE"].includes(transaction.type)
 
   const getTransactionIcon = () => {
     switch (transaction.type) {
@@ -38,8 +41,10 @@ export function TransactionItem({ transaction, onClick }: TransactionItemProps) 
         return <ArrowUpRight className="w-5 h-5" />
       case "CARD_AUTHORIZATION":
       case "CARD_CAPTURE":
+      case "CARD_PURCHASE":
         return <CreditCard className="w-5 h-5" />
       case "REFUND":
+      case "CARD_REFUND":
         return <RefreshCw className="w-5 h-5" />
       case "FEE":
         return <AlertCircle className="w-5 h-5" />

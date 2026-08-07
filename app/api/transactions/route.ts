@@ -1,6 +1,16 @@
 import { NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase-server'
 import { prisma } from '@/lib/prisma'
+import type { Prisma } from '@prisma/client'
+import {
+  notFound,
+  serverError,
+  tooManyRequests,
+  unauthorized,
+  validationError,
+} from '@/lib/api-utils'
+import { transactionQuerySchema } from '@/lib/validation'
+import { RATE_LIMITS, rateLimit } from '@/lib/rate-limit'
 
 export async function GET(request: Request) {
   try {
@@ -11,17 +21,26 @@ export async function GET(request: Request) {
     } = await supabase.auth.getUser()
 
     if (!user) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+      return unauthorized()
     }
 
-    // Get query parameters
+    const limit_ = rateLimit(`transactions:list:${user.id}`, RATE_LIMITS.read)
+    if (!limit_.allowed) {
+      return tooManyRequests(limit_.retryAfterSeconds)
+    }
+
+    // Query params used to be spread into a `where: any` straight off the URL,
+    // so an unrecognised value reached Prisma untouched. Validate first, then
+    // build a typed filter.
     const { searchParams } = new URL(request.url)
-    const limit = parseInt(searchParams.get('limit') || '50')
-    const offset = parseInt(searchParams.get('offset') || '0')
-    const type = searchParams.get('type') // Filter by transaction type
-    const status = searchParams.get('status') // Filter by status
-    const dateFrom = searchParams.get('dateFrom') // Start date
-    const dateTo = searchParams.get('dateTo') // End date
+    const parsed = transactionQuerySchema.safeParse(
+      Object.fromEntries(searchParams)
+    )
+    if (!parsed.success) {
+      return validationError(parsed.error)
+    }
+
+    const { limit, offset, type, status, dateFrom, dateTo } = parsed.data
 
     // Find user in database
     const dbUser = await prisma.user.findUnique({
@@ -29,33 +48,22 @@ export async function GET(request: Request) {
     })
 
     if (!dbUser) {
-      return NextResponse.json(
-        { error: 'User not found' },
-        { status: 404 }
-      )
+      return notFound('User not found')
     }
 
-    // Build filter conditions
-    const where: any = {
+    // Build filter conditions. Scoped to the caller's own transactions.
+    const where: Prisma.TransactionWhereInput = {
       userId: dbUser.id,
-    }
-
-    if (type) {
-      where.type = type
-    }
-
-    if (status) {
-      where.status = status
-    }
-
-    if (dateFrom || dateTo) {
-      where.createdAt = {}
-      if (dateFrom) {
-        where.createdAt.gte = new Date(dateFrom)
-      }
-      if (dateTo) {
-        where.createdAt.lte = new Date(dateTo)
-      }
+      ...(type ? { type } : {}),
+      ...(status ? { status } : {}),
+      ...(dateFrom || dateTo
+        ? {
+            createdAt: {
+              ...(dateFrom ? { gte: dateFrom } : {}),
+              ...(dateTo ? { lte: dateTo } : {}),
+            },
+          }
+        : {}),
     }
 
     // Fetch transactions
@@ -112,11 +120,7 @@ export async function GET(request: Request) {
         hasMore: offset + limit < totalCount,
       },
     })
-  } catch (error: any) {
-    console.error('Error fetching transactions:', error)
-    return NextResponse.json(
-      { error: error.message || 'Failed to fetch transactions' },
-      { status: 500 }
-    )
+  } catch (error) {
+    return serverError('transactions', error)
   }
 }

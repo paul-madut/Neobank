@@ -33,7 +33,7 @@ export default async function ACHPage() {
   }
 
   return (
-    <div className="flex h-screen w-full bg-gradient-to-br from-zinc-50 via-zinc-100 to-zinc-50 dark:from-zinc-950 dark:via-zinc-900 dark:to-zinc-950">
+    <div className="flex flex-col md:flex-row h-screen w-full bg-gradient-to-br from-zinc-50 via-zinc-100 to-zinc-50 dark:from-zinc-950 dark:via-zinc-900 dark:to-zinc-950">
       {/* Sidebar */}
       <DashboardSidebar userEmail={user.email || ""} kycStatus={kycStatus} />
 

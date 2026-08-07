@@ -4,6 +4,7 @@ import { useEffect, useState } from "react"
 import { useRouter } from "next/navigation"
 import { PlaidLinkButton } from "@/components/plaid/plaid-link-button"
 import { ExternalAccountsList } from "@/components/accounts/external-accounts-list"
+import { DemoModeBanner } from "@/components/demo/demo-mode-banner"
 import { ArrowLeft, Plus, ShieldAlert } from "lucide-react"
 import Link from "next/link"
 import { Button } from "@/components/ui/button"
@@ -32,9 +33,9 @@ export default function BanksPage() {
 
       const data = await response.json()
       setAccounts(data.externalAccounts || [])
-    } catch (err: any) {
+    } catch (err) {
       console.error("Error fetching accounts:", err)
-      setError(err.message || "Failed to load accounts")
+      setError(err instanceof Error ? err.message : "Failed to load accounts")
     } finally {
       setLoading(false)
     }
@@ -71,6 +72,8 @@ export default function BanksPage() {
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-zinc-50 via-zinc-100 to-zinc-50 dark:from-zinc-950 dark:via-zinc-900 dark:to-zinc-950">
+      <DemoModeBanner />
+
       <div className="container mx-auto px-4 py-8 max-w-6xl">
         {/* Header */}
         <div className="mb-8">
@@ -146,11 +149,19 @@ export default function BanksPage() {
             About External Accounts
           </h3>
           <ul className="text-sm text-blue-800 dark:text-blue-200 space-y-1">
-            <li>• Connect your existing bank accounts securely via Plaid</li>
-            <li>• View real-time balances from all your connected accounts</li>
-            <li>• ACH transfers will be available in a future update</li>
+            <li>• Bank accounts are connected through Plaid Link</li>
             <li>
-              • Your credentials are encrypted and never stored on our servers
+              • Your bank login credentials are entered in Plaid&apos;s flow and are
+              never sent to, seen by, or stored by this app
+            </li>
+            <li>• Balances are fetched from Plaid and refreshed on demand</li>
+            <li>
+              • Demo build: Plaid runs in sandbox mode, so only Plaid&apos;s test
+              institutions can be linked and no real bank is contacted
+            </li>
+            <li>
+              • ACH transfers in this demo are simulated locally and settle
+              instantly. No money moves.
             </li>
           </ul>
         </div>

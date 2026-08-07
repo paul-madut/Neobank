@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useRef, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { P2PTransferForm } from '@/components/transfers/p2p-transfer-form'
 import { TransferConfirmation } from '@/components/transfers/transfer-confirmation'
@@ -8,39 +8,34 @@ import { TransferHistory } from '@/components/transfers/transfer-history'
 import { AlertCircle, Send, ArrowLeft } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import Link from 'next/link'
+import type { InternalAccount, PublicRecipient } from '@/types/account'
 
-interface RecipientInfo {
-  id: string
-  email: string
-  firstName: string
-  lastName: string
-  accountId: string
-  accountNumber: string
-  accountStatus: string
-}
 
 interface TransferData {
-  recipient: RecipientInfo
+  recipient: PublicRecipient
   amount: number
   description?: string
 }
 
+/** The account as the server hands it over: the Decimal balance is stringified
+ *  before crossing the server/client boundary. */
+type SerializedAccount = Omit<InternalAccount, 'balance'> & { balance: string }
+
 interface TransfersClientProps {
-  account: any
-  userEmail: string
+  account: SerializedAccount | null
   kycStatus: 'PENDING' | 'VERIFIED' | 'REJECTED' | 'REQUIRES_REVIEW'
 }
 
 export function TransfersClient({
   account,
-  userEmail,
   kycStatus,
 }: TransfersClientProps) {
   const router = useRouter()
   const [showConfirmation, setShowConfirmation] = useState(false)
   const [transferData, setTransferData] = useState<TransferData | null>(null)
   const [selectedRecipient, setSelectedRecipient] =
-    useState<RecipientInfo | null>(null)
+    useState<PublicRecipient | null>(null)
+  const idempotencyKeyRef = useRef<string | null>(null)
 
   const handleTransferInitiated = (data: TransferData) => {
     setTransferData(data)
@@ -52,13 +47,21 @@ export function TransfersClient({
       throw new Error('No transfer data')
     }
 
+    // One key per confirmed transfer, reused if the user retries after a
+    // failure. The server returns the original transaction for a repeated key
+    // rather than sending the money again.
+    if (!idempotencyKeyRef.current) {
+      idempotencyKeyRef.current = crypto.randomUUID()
+    }
+
     const response = await fetch('/api/transfers/p2p', {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
+        'Idempotency-Key': idempotencyKeyRef.current,
       },
       body: JSON.stringify({
-        recipientIdentifier: transferData.recipient.email,
+        recipientIdentifier: transferData.recipient.identifier,
         amount: transferData.amount,
         description: transferData.description,
       }),
@@ -70,11 +73,13 @@ export function TransfersClient({
       throw new Error(data.error || 'Transfer failed')
     }
 
+    idempotencyKeyRef.current = null
+
     // Refresh the page to update balances
     router.refresh()
   }
 
-  const handleQuickTransfer = (recipient: RecipientInfo) => {
+  const handleQuickTransfer = (recipient: PublicRecipient) => {
     setSelectedRecipient(recipient)
     // Scroll to the form
     window.scrollTo({ top: 0, behavior: 'smooth' })
@@ -151,7 +156,7 @@ export function TransfersClient({
                   No Active Account
                 </h3>
                 <p className="text-sm text-red-700 dark:text-red-300">
-                  You don't have an active account to send transfers from.
+                  You don&apos;t have an active account to send transfers from.
                 </p>
               </div>
             </div>
@@ -177,8 +182,11 @@ export function TransfersClient({
                     </div>
                   </div>
 
-                  {/* Transfer Form */}
+                  {/* Transfer Form. Keyed on the recipient so choosing one from
+                      the recent list remounts the form prefilled. */}
                   <P2PTransferForm
+                    key={selectedRecipient?.identifier ?? 'new-transfer'}
+                    initialRecipient={selectedRecipient}
                     availableBalance={parseFloat(account.balance)}
                     onTransferInitiated={handleTransferInitiated}
                   />

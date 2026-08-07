@@ -3,6 +3,7 @@ import { headers } from 'next/headers'
 import { stripe } from '@/lib/stripe'
 import { prisma } from '@/lib/prisma'
 import Stripe from 'stripe'
+import { claimWebhookEvent, releaseWebhookEvent } from '@/lib/webhook-events'
 
 export async function POST(request: Request) {
   const body = await request.text()
@@ -20,14 +21,23 @@ export async function POST(request: Request) {
     event = stripe.webhooks.constructEvent(
       body,
       signature,
-      process.env.STRIPE_WEBHOOK_SECRET!
+      // Stripe mints a separate signing secret per endpoint. The Stripe CLI
+      // issues one account-wide secret for local forwarding, so
+      // STRIPE_WEBHOOK_SECRET stays a valid development fallback.
+      (process.env.STRIPE_IDENTITY_WEBHOOK_SECRET ||
+        process.env.STRIPE_WEBHOOK_SECRET)!
     )
-  } catch (err: any) {
-    console.error('Webhook signature verification failed:', err.message)
-    return NextResponse.json(
-      { error: `Webhook Error: ${err.message}` },
-      { status: 400 }
-    )
+  } catch (err) {
+    console.error('Webhook signature verification failed:', err)
+    return NextResponse.json({ error: 'Invalid signature' }, { status: 400 })
+  }
+
+  // Stripe delivers at-least-once. Claim the event so a redelivery cannot
+  // re-apply a KYC status transition.
+  const claimed = await claimWebhookEvent('stripe_identity', event.id, event.type)
+  if (!claimed) {
+    console.log(`Duplicate Stripe Identity event ignored: ${event.id}`)
+    return NextResponse.json({ received: true, duplicate: true })
   }
 
   // Handle the event
@@ -83,10 +93,11 @@ export async function POST(request: Request) {
     }
 
     return NextResponse.json({ received: true })
-  } catch (error: any) {
-    console.error('Error processing webhook:', error)
+  } catch (error) {
+    await releaseWebhookEvent('stripe_identity', event.id)
+    console.error('[webhooks/stripe-identity]', error)
     return NextResponse.json(
-      { error: error.message || 'Webhook processing failed' },
+      { error: 'Webhook processing failed' },
       { status: 500 }
     )
   }

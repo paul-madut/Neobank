@@ -1,9 +1,24 @@
 "use client";
 
-import React, { useEffect, useId, useState, useRef } from "react";
+import React, { useCallback, useId, useState } from "react";
 import { AnimatePresence, motion } from "framer-motion";
 import { cn } from "@/lib/utils";
 import { SparklesCore } from "@/components/ui/sparkles";
+
+/**
+ * Everything about a single beam that is randomised. Generated once, when the
+ * container is measured, because Math.random() during render gives each
+ * re-render a different answer: the beams restarted their animation on every
+ * hover toggle, and the server and the client disagreed during hydration.
+ */
+interface BeamConfig {
+  /** Vertical offset within the container, in pixels. */
+  top: number;
+  duration: number;
+  delay: number;
+  hoverDelay: number;
+  hoverRepeatDelay: number;
+}
 
 export const Cover = ({
   children,
@@ -13,28 +28,39 @@ export const Cover = ({
   className?: string;
 }) => {
   const [hovered, setHovered] = useState(false);
-  const ref = useRef<HTMLDivElement>(null);
   const [containerWidth, setContainerWidth] = useState(0);
-  const [beamPositions, setBeamPositions] = useState<number[]>([]);
+  const [beams, setBeams] = useState<BeamConfig[]>([]);
 
-  useEffect(() => {
-    if (ref.current) {
-      setContainerWidth(ref.current?.clientWidth ?? 0);
-      const height = ref.current?.clientHeight ?? 0;
-      const numberOfBeams = Math.floor(height / 10);
-      const positions = Array.from(
-        { length: numberOfBeams },
-        (_, i) => (i + 1) * (height / (numberOfBeams + 1))
-      );
-      setBeamPositions(positions);
+  // How many beams there are depends on the rendered height, which is only
+  // knowable once the node is in the DOM. A ref callback runs during commit
+  // with layout available, so the measurement and the randomised config derived
+  // from it stay out of render (where Math.random() would be non-idempotent)
+  // and out of an effect (where the setState would cascade a second render).
+  const measureContainer = useCallback((node: HTMLDivElement | null) => {
+    if (!node) {
+      return;
     }
+
+    const height = node.clientHeight;
+    const numberOfBeams = Math.floor(height / 10);
+
+    setContainerWidth(node.clientWidth);
+    setBeams(
+      Array.from({ length: numberOfBeams }, (_, i) => ({
+        top: (i + 1) * (height / (numberOfBeams + 1)),
+        duration: Math.random() * 2 + 1,
+        delay: Math.random() * 2 + 1,
+        hoverDelay: Math.random() * (1 - 0.2) + 0.2,
+        hoverRepeatDelay: Math.random() * (2 - 1) + 1,
+      }))
+    );
   }, []);
 
   return (
     <div
       onMouseEnter={() => setHovered(true)}
       onMouseLeave={() => setHovered(false)}
-      ref={ref}
+      ref={measureContainer}
       className="relative hover:bg-neutral-900 group/cover inline-block dark:bg-neutral-900 bg-neutral-100 px-2 py-2 transition duration-200 rounded-sm"
     >
       <AnimatePresence>
@@ -77,14 +103,16 @@ export const Cover = ({
           </motion.div>
         )}
       </AnimatePresence>
-      {beamPositions.map((position, index) => (
+      {beams.map((beam, index) => (
         <Beam
           key={index}
           hovered={hovered}
-          duration={Math.random() * 2 + 1}
-          delay={Math.random() * 2 + 1}
+          duration={beam.duration}
+          delay={beam.delay}
+          hoverDelay={beam.hoverDelay}
+          hoverRepeatDelay={beam.hoverRepeatDelay}
           width={containerWidth}
-          style={{ top: `${position}px` }}
+          style={{ top: `${beam.top}px` }}
         />
       ))}
       <motion.span
@@ -139,6 +167,8 @@ export const Beam = ({
   delay,
   duration,
   hovered,
+  hoverDelay,
+  hoverRepeatDelay,
   width = 600,
   ...svgProps
 }: {
@@ -146,6 +176,8 @@ export const Beam = ({
   delay?: number;
   duration?: number;
   hovered?: boolean;
+  hoverDelay?: number;
+  hoverRepeatDelay?: number;
   width?: number;
 } & React.ComponentProps<typeof motion.svg>) => {
   const id = useId();
@@ -182,8 +214,8 @@ export const Beam = ({
             duration: hovered ? 0.5 : duration ?? 2,
             ease: "linear",
             repeat: Infinity,
-            delay: hovered ? Math.random() * (1 - 0.2) + 0.2 : 0,
-            repeatDelay: hovered ? Math.random() * (2 - 1) + 1 : delay ?? 1,
+            delay: hovered ? hoverDelay ?? 0.2 : 0,
+            repeatDelay: hovered ? hoverRepeatDelay ?? 1 : delay ?? 1,
           }}
         >
           <stop stopColor="#2EB9DF" stopOpacity="0" />
@@ -204,6 +236,9 @@ export const CircleIcon = ({
 }) => {
   return (
     <div
+      // The corner dots are meant to pulse out of phase with each other. The
+      // delay prop was accepted and then dropped, so all four pulsed in unison.
+      style={delay ? { animationDelay: `${delay}s` } : undefined}
       className={cn(
         "pointer-events-none animate-pulse group-hover/cover:hidden group-hover/cover:opacity-100 group h-2 w-2 rounded-full bg-neutral-600 dark:bg-white opacity-20 group-hover/cover:bg-white",
         className

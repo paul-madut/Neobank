@@ -1,5 +1,6 @@
 import { createClient } from "@/lib/supabase-server"
 import { prisma } from "@/lib/prisma"
+import { provisionUser } from "@/lib/provisioning"
 import { redirect } from "next/navigation"
 import { DashboardSidebar } from "@/components/dashboard/dashboard-sidebar"
 import { KYCBanner } from "@/components/kyc/kyc-banner"
@@ -13,18 +14,23 @@ async function getAuthenticatedUser() {
   } = await supabase.auth.getUser()
 
   if (!user) {
-    redirect("/sign-in")
+    redirect("/login")
   }
 
   const dbUser = await prisma.user.findUnique({
     where: { supabaseId: user.id },
   })
 
-  if (!dbUser) {
-    redirect("/sign-in")
+  if (dbUser) {
+    return dbUser
   }
 
-  return dbUser
+  // Sessions issued before provisioning moved into /auth/callback have a
+  // Supabase user and no Postgres user. Bouncing them to /login would just
+  // bounce them back here, so heal it instead - provisioning is idempotent.
+  const provisioned = await provisionUser(user)
+
+  return provisioned.user
 }
 
 async function getKYCStatus(userId: string) {
@@ -41,7 +47,7 @@ export default async function CardsPage() {
   const kycStatus = await getKYCStatus(user.id)
 
   return (
-    <div className="flex h-screen overflow-hidden">
+    <div className="flex flex-col md:flex-row h-screen overflow-hidden">
       <DashboardSidebar userEmail={user.email} kycStatus={kycStatus} />
       <div className="flex-1 overflow-y-auto">
         <KYCBanner kycStatus={kycStatus} />

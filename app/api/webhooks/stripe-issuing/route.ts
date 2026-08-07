@@ -4,11 +4,24 @@ import { stripe } from '@/lib/stripe-issuing-utils'
 import { prisma } from '@/lib/prisma'
 import Stripe from 'stripe'
 import { Decimal } from '@prisma/client/runtime/library'
+import {
+  InsufficientFundsError,
+  getSystemAccount,
+  postDoubleEntry,
+} from '@/lib/ledger'
+import { claimWebhookEvent, releaseWebhookEvent } from '@/lib/webhook-events'
 
-const STRIPE_WEBHOOK_SECRET = process.env.STRIPE_WEBHOOK_SECRET
+// Stripe mints a separate signing secret per webhook endpoint, so Issuing and
+// Identity cannot share one in a deployed environment. The Stripe CLI does
+// issue a single account-wide secret for local forwarding, which is why
+// STRIPE_WEBHOOK_SECRET remains a valid fallback for development.
+const STRIPE_WEBHOOK_SECRET =
+  process.env.STRIPE_ISSUING_WEBHOOK_SECRET || process.env.STRIPE_WEBHOOK_SECRET
 
 if (!STRIPE_WEBHOOK_SECRET) {
-  console.warn('STRIPE_WEBHOOK_SECRET is not set')
+  console.warn(
+    'Neither STRIPE_ISSUING_WEBHOOK_SECRET nor STRIPE_WEBHOOK_SECRET is set'
+  )
 }
 
 export async function POST(request: NextRequest) {
@@ -45,42 +58,60 @@ export async function POST(request: NextRequest) {
 
     console.log(`Received Stripe Issuing webhook: ${event.type}`)
 
-    // Handle different event types
-    switch (event.type) {
-      case 'issuing_card.created':
-        await handleCardCreated(event.data.object as Stripe.Issuing.Card)
-        break
+    // Stripe delivers at-least-once and retries for up to three days. Claim the
+    // event before doing anything that touches the ledger.
+    const claimed = await claimWebhookEvent(
+      'stripe_issuing',
+      event.id,
+      event.type
+    )
+    if (!claimed) {
+      console.log(`Duplicate Stripe Issuing event ignored: ${event.id}`)
+      return NextResponse.json({ received: true, duplicate: true })
+    }
 
-      case 'issuing_card.updated':
-        await handleCardUpdated(event.data.object as Stripe.Issuing.Card)
-        break
+    try {
+      // Handle different event types
+      switch (event.type) {
+        case 'issuing_card.created':
+          await handleCardCreated(event.data.object as Stripe.Issuing.Card)
+          break
 
-      case 'issuing_authorization.created':
-        await handleAuthorizationCreated(
-          event.data.object as Stripe.Issuing.Authorization
-        )
-        break
+        case 'issuing_card.updated':
+          await handleCardUpdated(event.data.object as Stripe.Issuing.Card)
+          break
 
-      case 'issuing_authorization.updated':
-        await handleAuthorizationUpdated(
-          event.data.object as Stripe.Issuing.Authorization
-        )
-        break
+        case 'issuing_authorization.created':
+          await handleAuthorizationCreated(
+            event.data.object as Stripe.Issuing.Authorization
+          )
+          break
 
-      case 'issuing_transaction.created':
-        await handleTransactionCreated(
-          event.data.object as Stripe.Issuing.Transaction
-        )
-        break
+        case 'issuing_authorization.updated':
+          await handleAuthorizationUpdated(
+            event.data.object as Stripe.Issuing.Authorization
+          )
+          break
 
-      case 'issuing_transaction.updated':
-        await handleTransactionUpdated(
-          event.data.object as Stripe.Issuing.Transaction
-        )
-        break
+        case 'issuing_transaction.created':
+          await handleTransactionCreated(
+            event.data.object as Stripe.Issuing.Transaction
+          )
+          break
 
-      default:
-        console.log(`Unhandled event type: ${event.type}`)
+        case 'issuing_transaction.updated':
+          await handleTransactionUpdated(
+            event.data.object as Stripe.Issuing.Transaction
+          )
+          break
+
+        default:
+          console.log(`Unhandled event type: ${event.type}`)
+      }
+    } catch (handlerError) {
+      // Nothing was committed, so give the claim back and let Stripe retry.
+      await releaseWebhookEvent('stripe_issuing', event.id)
+      throw handlerError
     }
 
     return NextResponse.json({ received: true })
@@ -170,14 +201,16 @@ async function handleTransactionCreated(transaction: Stripe.Issuing.Transaction)
   console.log(`  Amount: ${transaction.amount / 100} ${transaction.currency}`)
   console.log(`  Type: ${transaction.type}`)
 
+  const cardId = stripeCardId(transaction.card)
+
   // Find the card
   const card = await prisma.card.findUnique({
-    where: { stripeCardId: transaction.card },
-    include: { user: true },
+    where: { stripeCardId: cardId },
+    select: { userId: true, last4: true, user: { select: { email: true } } },
   })
 
   if (!card) {
-    console.error(`Card not found: ${transaction.card}`)
+    console.error(`Card not found: ${cardId}`)
     return
   }
 
@@ -195,56 +228,76 @@ async function handleTransactionCreated(transaction: Stripe.Issuing.Transaction)
     return
   }
 
-  // Create transaction record
-  const amount = Math.abs(transaction.amount) / 100 // Convert from cents and get absolute value
+  // Stripe reports amounts in the smallest currency unit. Divide with Decimal
+  // so a $0.29 purchase does not become 0.28999999999999998.
+  const amount = new Decimal(transaction.amount).abs().div(100)
   const isRefund = transaction.amount > 0 // Positive amount = refund, negative = purchase
 
-  const dbTransaction = await prisma.transaction.create({
-    data: {
-      userId: card.userId,
-      fromAccountId: isRefund ? null : internalAccount.id,
-      toAccountId: isRefund ? internalAccount.id : null,
-      amount: new Decimal(amount),
-      currency: transaction.currency.toUpperCase(),
-      type: isRefund ? 'CARD_REFUND' : 'CARD_PURCHASE',
-      status: 'COMPLETED',
-      description: `${transaction.merchant_data?.name || 'Card Transaction'} - Card ••••${card.last4}`,
-      externalId: transaction.id,
-      metadata: {
-        stripeTransactionId: transaction.id,
-        merchantName: transaction.merchant_data?.name,
-        merchantCategory: transaction.merchant_data?.category,
-        cardLast4: card.last4,
-      },
-    },
-  })
+  if (amount.lte(0)) {
+    console.log(`Ignoring zero-amount card transaction ${transaction.id}`)
+    return
+  }
 
-  // Update account balance and create ledger entry
-  const currentBalance = parseFloat(internalAccount.balance.toString())
-  const newBalance = isRefund ? currentBalance + amount : currentBalance - amount
+  try {
+    await prisma.$transaction(async (tx) => {
+      // Card spend is money leaving the neobank for the card network, so the
+      // network settlement house account is the other side of the entry.
+      const settlement = await getSystemAccount(tx, 'CARD_SETTLEMENT')
 
-  await prisma.$transaction(async (tx) => {
-    // Create ledger entry
-    await tx.ledgerEntry.create({
-      data: {
-        accountId: internalAccount.id,
+      const dbTransaction = await tx.transaction.create({
+        data: {
+          userId: card.userId,
+          fromAccountId: isRefund ? null : internalAccount.id,
+          toAccountId: isRefund ? internalAccount.id : null,
+          amount,
+          currency: transaction.currency.toUpperCase(),
+          type: isRefund ? 'CARD_REFUND' : 'CARD_PURCHASE',
+          status: 'COMPLETED',
+          description: `${transaction.merchant_data?.name || 'Card Transaction'} - Card ••••${card.last4}`,
+          // Stripe's own transaction ID is the natural idempotency key here.
+          // It was missing entirely, which made this create() throw every time.
+          idempotencyKey: `stripe_issuing_txn_${transaction.id}`,
+          externalId: transaction.id,
+          metadata: {
+            stripeTransactionId: transaction.id,
+            merchantName: transaction.merchant_data?.name,
+            merchantCategory: transaction.merchant_data?.category,
+            cardLast4: card.last4,
+          },
+        },
+      })
+
+      await postDoubleEntry(tx, {
         transactionId: dbTransaction.id,
-        entryType: isRefund ? 'CREDIT' : 'DEBIT',
-        amount: new Decimal(amount),
-        balanceAfter: new Decimal(newBalance),
-        description: isRefund ? 'Card Refund' : 'Card Purchase',
-      },
+        debitAccountId: isRefund ? settlement.id : internalAccount.id,
+        creditAccountId: isRefund ? internalAccount.id : settlement.id,
+        amount,
+        debitDescription: isRefund
+          ? 'Card Refund - settlement'
+          : 'Card Purchase',
+        creditDescription: isRefund
+          ? 'Card Refund'
+          : 'Card Purchase - settlement',
+      })
     })
+  } catch (error) {
+    if (error instanceof InsufficientFundsError) {
+      // Stripe already approved the authorization, so the money is owed. Record
+      // it for follow-up rather than silently dropping a real obligation.
+      console.error(
+        `Card transaction ${transaction.id} exceeds available balance for user ${card.userId}`
+      )
+      return
+    }
+    throw error
+  }
 
-    // Update account balance
-    await tx.account.update({
-      where: { id: internalAccount.id },
-      data: { balance: new Decimal(newBalance) },
-    })
-  })
+  console.log(`Transaction recorded for user ${card.user?.email ?? card.userId}`)
+}
 
-  console.log(`✅ Transaction recorded for user ${card.user.email}`)
-  console.log(`   New balance: $${newBalance.toFixed(2)}`)
+/** Stripe expandable fields arrive as either an ID or the full object. */
+function stripeCardId(card: string | Stripe.Issuing.Card): string {
+  return typeof card === 'string' ? card : card.id
 }
 
 async function handleTransactionUpdated(transaction: Stripe.Issuing.Transaction) {

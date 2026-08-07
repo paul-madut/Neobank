@@ -3,8 +3,9 @@ import { createClient } from '@/lib/supabase-server'
 import { prisma } from '@/lib/prisma'
 import { createLinkToken } from '@/lib/plaid-utils'
 import type { CreateLinkTokenResponse } from '@/types/account'
+import { serverError } from '@/lib/api-utils'
 
-export async function POST(request: Request) {
+export async function POST() {
   try {
     // Get authenticated user
     const supabase = await createClient()
@@ -22,7 +23,7 @@ export async function POST(request: Request) {
     // Check KYC status
     const dbUser = await prisma.user.findUnique({
       where: { supabaseId: user.id },
-      select: { kycStatus: true },
+      select: { kycStatus: true, firstName: true, lastName: true },
     })
 
     if (!dbUser || dbUser.kycStatus !== 'VERIFIED') {
@@ -32,10 +33,15 @@ export async function POST(request: Request) {
       )
     }
 
-    // Create link token
+    // Plaid matches legal_name against the name on the bank account being
+    // linked, so send the name we hold on file rather than the email address.
+    const legalName = [dbUser.firstName, dbUser.lastName]
+      .filter(Boolean)
+      .join(' ')
+
     const { linkToken, expiration } = await createLinkToken(
       user.id,
-      user.email || 'User'
+      legalName || undefined
     )
 
     const response: CreateLinkTokenResponse = {
@@ -44,11 +50,7 @@ export async function POST(request: Request) {
     }
 
     return NextResponse.json(response)
-  } catch (error: any) {
-    console.error('Error in create-link-token:', error)
-    return NextResponse.json(
-      { error: error.message || 'Failed to create link token' },
-      { status: 500 }
-    )
+  } catch (error) {
+    return serverError('plaid/create-link-token', error)
   }
 }

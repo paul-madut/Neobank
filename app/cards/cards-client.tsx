@@ -6,6 +6,12 @@ import { CreateCardForm } from "@/components/cards/create-card-form"
 import { CardControls } from "@/components/cards/card-controls"
 import { toast } from "sonner"
 
+/** Sensitive card fields, held in memory only while the user reveals a card. */
+interface RevealedCardDetails {
+  number: string
+  cvc: string
+}
+
 interface Card {
   id: string
   last4: string
@@ -22,7 +28,9 @@ interface Card {
 export function CardsClient() {
   const [cards, setCards] = useState<Card[]>([])
   const [loading, setLoading] = useState(true)
-  const [cardDetails, setCardDetails] = useState<Record<string, any>>({})
+  const [cardDetails, setCardDetails] = useState<
+    Record<string, RevealedCardDetails>
+  >({})
 
   const fetchCards = async () => {
     try {
@@ -34,9 +42,11 @@ export function CardsClient() {
       }
 
       setCards(data.cards || [])
-    } catch (error: any) {
+    } catch (error) {
       console.error("Error fetching cards:", error)
-      toast.error(error.message || "Failed to load cards")
+      toast.error(
+        error instanceof Error ? error.message : "Failed to load cards"
+      )
     } finally {
       setLoading(false)
     }
@@ -58,9 +68,13 @@ export function CardsClient() {
           cvc: data.card.cvc,
         },
       }))
-    } catch (error: any) {
+    } catch (error) {
       console.error("Error revealing card:", error)
-      toast.error(error.message || "Failed to reveal card details")
+      toast.error(
+        error instanceof Error
+          ? error.message
+          : "Failed to reveal card details"
+      )
     }
   }
 

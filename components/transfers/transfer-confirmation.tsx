@@ -11,21 +11,14 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog'
 import { AlertCircle, CheckCircle, ArrowRight } from 'lucide-react'
+import { initials } from '@/lib/utils'
+import type { PublicRecipient } from '@/types/account'
 
-interface RecipientInfo {
-  id: string
-  email: string
-  firstName: string
-  lastName: string
-  accountId: string
-  accountNumber: string
-  accountStatus: string
-}
 
 interface TransferConfirmationProps {
   isOpen: boolean
   onClose: () => void
-  recipient: RecipientInfo
+  recipient: PublicRecipient
   amount: number
   description?: string
   onConfirm: () => Promise<void>
@@ -55,8 +48,8 @@ export function TransferConfirmation({
       setTimeout(() => {
         handleClose()
       }, 2000)
-    } catch (err: any) {
-      setError(err.message || 'Transfer failed')
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Transfer failed')
     } finally {
       setConfirming(false)
     }
@@ -82,8 +75,7 @@ export function TransferConfirmation({
               Transfer Successful!
             </h3>
             <p className="text-sm text-zinc-600 dark:text-zinc-400 text-center">
-              ${amount.toFixed(2)} sent to {recipient.firstName}{' '}
-              {recipient.lastName}
+              ${amount.toFixed(2)} sent to {recipient.displayName}
             </p>
           </div>
         ) : (
@@ -116,20 +108,16 @@ export function TransferConfirmation({
                   </div>
                   <div className="flex items-center gap-2">
                     <div className="h-10 w-10 rounded-full bg-zinc-200 dark:bg-zinc-700 flex items-center justify-center text-zinc-600 dark:text-zinc-300 font-medium">
-                      {recipient.firstName[0]}
-                      {recipient.lastName[0]}
+                      {initials(recipient.displayName)}
                     </div>
                     <div>
                       <div className="font-medium text-zinc-900 dark:text-white">
-                        {recipient.firstName} {recipient.lastName}
+                        {recipient.displayName}
                       </div>
                       <div className="text-sm text-zinc-500 dark:text-zinc-400">
-                        {recipient.email}
+                        {recipient.maskedAccountNumber}
                       </div>
                     </div>
-                  </div>
-                  <div className="text-xs text-zinc-500 dark:text-zinc-500 mt-1">
-                    Account: {recipient.accountNumber}
                   </div>
                 </div>
 

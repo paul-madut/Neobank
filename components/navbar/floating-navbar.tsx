@@ -19,11 +19,10 @@ export function FloatingNavbar() {
     return () => window.removeEventListener("scroll", handleScroll)
   }, [])
 
-  const navItems = [
-    { name: "Features", href: "#features" },
-    { name: "About", href: "#about" },
-    { name: "Pricing", href: "#pricing" },
-  ]
+  // Only sections that actually exist on the page. "#about" and "#pricing" used
+  // to be here and scrolled nowhere, and a demo that moves no money has no
+  // pricing to link to in the first place.
+  const navItems = [{ name: "Features", href: "#features" }]
 
   return (
     <>

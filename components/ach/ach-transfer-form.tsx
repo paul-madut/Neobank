@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useRef, useState } from 'react'
 import { useMutation } from '@tanstack/react-query'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -38,6 +38,12 @@ export default function ACHTransferForm({
   const [description, setDescription] = useState('')
   const [error, setError] = useState('')
 
+  // One key per logical transfer, held across retries. If the request times out
+  // and the user hits submit again, the server recognises the key and returns
+  // the original transfer instead of moving the money twice. A fresh key is
+  // minted only once a transfer has actually succeeded.
+  const idempotencyKeyRef = useRef<string | null>(null)
+
   const initiateTransfer = useMutation({
     mutationFn: async (data: {
       externalAccountId: string
@@ -45,9 +51,16 @@ export default function ACHTransferForm({
       direction: string
       description?: string
     }) => {
+      if (!idempotencyKeyRef.current) {
+        idempotencyKeyRef.current = crypto.randomUUID()
+      }
+
       const res = await fetch('/api/ach/initiate', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: {
+          'Content-Type': 'application/json',
+          'Idempotency-Key': idempotencyKeyRef.current,
+        },
         body: JSON.stringify(data),
       })
 
@@ -61,6 +74,7 @@ export default function ACHTransferForm({
     },
     onSuccess: () => {
       // Reset form
+      idempotencyKeyRef.current = null
       setAmount('')
       setDescription('')
       setError('')
@@ -170,7 +184,7 @@ export default function ACHTransferForm({
         </Select>
         {selectedAccount && selectedAccount.availableBalance !== undefined && selectedAccount.availableBalance !== null && (
           <p className="text-sm text-zinc-600 dark:text-zinc-400">
-            Available: ${parseFloat(selectedAccount.availableBalance).toFixed(2)}
+            Available: ${selectedAccount.availableBalance.toFixed(2)}
           </p>
         )}
       </div>

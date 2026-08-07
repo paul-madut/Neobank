@@ -1,10 +1,22 @@
-"use client"
-
+import { redirect } from "next/navigation"
+import { createClient } from "@/lib/supabase-server"
 import { Button } from "@/components/ui/button"
 import { AlertCircle, ArrowLeft, RotateCcw } from "lucide-react"
 import Link from "next/link"
 
-export default function KYCFailedPage() {
+export default async function KYCFailedPage() {
+  const supabase = await createClient()
+
+  const {
+    data: { user },
+  } = await supabase.auth.getUser()
+
+  // The proxy already gates /kyc, but a page that reports on someone's identity
+  // check should not depend on the proxy having run.
+  if (!user) {
+    redirect("/login")
+  }
+
   return (
     <div className="min-h-screen bg-gradient-to-br from-red-50 via-orange-50 to-red-50 dark:from-zinc-950 dark:via-zinc-900 dark:to-zinc-950 flex items-center justify-center px-4">
       <div className="max-w-md w-full text-center">
@@ -35,7 +47,7 @@ export default function KYCFailedPage() {
             </li>
             <li className="flex items-start gap-2">
               <span className="text-red-500 flex-shrink-0">•</span>
-              <span>Selfie didn't match the ID photo</span>
+              <span>Selfie didn&apos;t match the ID photo</span>
             </li>
             <li className="flex items-start gap-2">
               <span className="text-red-500 flex-shrink-0">•</span>
@@ -63,7 +75,7 @@ export default function KYCFailedPage() {
         </div>
 
         <p className="mt-6 text-sm text-zinc-500 dark:text-zinc-400">
-          Need help? <Link href="/support" className="text-red-500 hover:underline">Contact Support</Link>
+          Need help? Live support is not available in this demo.
         </p>
       </div>
     </div>

@@ -1,7 +1,6 @@
 "use client"
 
 import { useState } from "react"
-import { useRouter } from "next/navigation"
 import { Button } from "@/components/ui/button"
 import {
   ShieldCheck,
@@ -17,14 +16,11 @@ import { toast } from "sonner"
 
 interface KYCVerificationClientProps {
   kycStatus: "PENDING" | "VERIFIED" | "REJECTED" | "REQUIRES_REVIEW"
-  userEmail: string
 }
 
 export function KYCVerificationClient({
   kycStatus,
-  userEmail,
 }: KYCVerificationClientProps) {
-  const router = useRouter()
   const [loading, setLoading] = useState(false)
 
   const handleStartVerification = async () => {
@@ -49,9 +45,11 @@ export function KYCVerificationClient({
       } else {
         throw new Error("No verification URL received")
       }
-    } catch (error: any) {
+    } catch (error) {
       console.error("Error starting verification:", error)
-      toast.error(error.message || "Failed to start verification")
+      toast.error(
+        error instanceof Error ? error.message : "Failed to start verification"
+      )
       setLoading(false)
     }
   }
@@ -74,7 +72,7 @@ export function KYCVerificationClient({
               <CheckCircle className="w-10 h-10 text-green-600 dark:text-green-400" />
             </div>
             <h1 className="text-3xl font-bold text-zinc-900 dark:text-white mb-4">
-              You're All Verified!
+              You&apos;re All Verified!
             </h1>
             <p className="text-lg text-zinc-600 dark:text-zinc-400 mb-8">
               Your identity has been successfully verified. You now have access to all
@@ -158,7 +156,8 @@ export function KYCVerificationClient({
               Government ID
             </h3>
             <p className="text-sm text-zinc-600 dark:text-zinc-400">
-              Passport, driver's license, or national ID card
+              In this demo, use one of Stripe&apos;s test-mode documents rather than
+              a real ID
             </p>
           </div>
 
@@ -187,23 +186,32 @@ export function KYCVerificationClient({
           </div>
         </div>
 
-        {/* Privacy Notice */}
+        {/* How This Works */}
         <div className="mb-8 p-6 rounded-lg bg-zinc-50 dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800">
           <h3 className="font-semibold text-zinc-900 dark:text-white mb-3">
-            Your Privacy Matters
+            How This Works
           </h3>
           <ul className="space-y-2 text-sm text-zinc-600 dark:text-zinc-400">
             <li className="flex items-start gap-2">
               <CheckCircle className="w-4 h-4 text-green-500 flex-shrink-0 mt-0.5" />
-              <span>Your documents are encrypted and securely stored</span>
+              <span>
+                Verification is handled by Stripe Identity on Stripe&apos;s own
+                hosted pages
+              </span>
             </li>
             <li className="flex items-start gap-2">
               <CheckCircle className="w-4 h-4 text-green-500 flex-shrink-0 mt-0.5" />
-              <span>We never share your information with third parties</span>
+              <span>
+                Your documents and selfie go straight to Stripe. This app never
+                receives or stores them, it only records the resulting status.
+              </span>
             </li>
             <li className="flex items-start gap-2">
               <CheckCircle className="w-4 h-4 text-green-500 flex-shrink-0 mt-0.5" />
-              <span>Verification is powered by Stripe Identity</span>
+              <span>
+                Demo build: Stripe Identity runs in test mode. Use Stripe&apos;s test
+                verification flow, not a real ID.
+              </span>
             </li>
           </ul>
         </div>
@@ -228,7 +236,8 @@ export function KYCVerificationClient({
             )}
           </Button>
           <p className="mt-4 text-sm text-zinc-500 dark:text-zinc-400">
-            By continuing, you agree to our terms of service and privacy policy
+            This is a demo application, not a licensed financial institution.
+            Verification runs in Stripe test mode.
           </p>
         </div>
       </div>

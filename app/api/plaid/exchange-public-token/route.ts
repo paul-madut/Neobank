@@ -3,6 +3,7 @@ import { createClient } from '@/lib/supabase-server'
 import { prisma } from '@/lib/prisma'
 import { exchangePublicToken, getAccounts, getInstitution } from '@/lib/plaid-utils'
 import type { ExchangePublicTokenRequest, ExchangePublicTokenResponse } from '@/types/account'
+import { serverError } from '@/lib/api-utils'
 
 export async function POST(request: Request) {
   try {
@@ -94,11 +95,7 @@ export async function POST(request: Request) {
     }
 
     return NextResponse.json(response)
-  } catch (error: any) {
-    console.error('Error in exchange-public-token:', error)
-    return NextResponse.json(
-      { error: error.message || 'Failed to exchange public token' },
-      { status: 500 }
-    )
+  } catch (error) {
+    return serverError('plaid/exchange-public-token', error)
   }
 }

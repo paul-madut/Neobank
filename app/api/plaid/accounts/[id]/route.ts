@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase-server'
 import { prisma } from '@/lib/prisma'
+import { serverError } from '@/lib/api-utils'
 
 export async function DELETE(
   request: NextRequest,
@@ -79,13 +80,7 @@ export async function DELETE(
       success: true,
       message: 'External account removed successfully',
     })
-  } catch (error: any) {
-    console.error('Error deleting external account:', error)
-    return NextResponse.json(
-      {
-        error: error.message || 'Failed to delete external account',
-      },
-      { status: 500 }
-    )
+  } catch (error) {
+    return serverError('plaid/accounts/[id]', error)
   }
 }

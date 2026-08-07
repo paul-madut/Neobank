@@ -71,9 +71,13 @@ export function ExternalAccountsList({
       } else if (onRefresh) {
         onRefresh()
       }
-    } catch (error: any) {
+    } catch (error) {
       console.error('Error deleting account:', error)
-      toast.error(error.message || 'Failed to remove bank account')
+      toast.error(
+        error instanceof Error
+          ? error.message
+          : 'Failed to remove bank account'
+      )
     } finally {
       setDeletingAccountId(null)
     }

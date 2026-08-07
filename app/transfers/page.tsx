@@ -46,10 +46,6 @@ export default async function TransfersPage() {
   }
 
   return (
-    <TransfersClient
-      account={account}
-      userEmail={user.email || ''}
-      kycStatus={kycStatus}
-    />
+    <TransfersClient account={account} kycStatus={kycStatus} />
   )
 }

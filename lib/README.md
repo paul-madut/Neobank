@@ -1,4 +1,27 @@
-# Supabase Client Files
+# lib/
+
+Shared server and client utilities.
+
+## Map of this directory
+
+| File | Responsibility |
+|------|----------------|
+| `ledger.ts` | Double-entry primitives. `postDoubleEntry` is the only sanctioned way to move a balance; it writes both sides and enforces the non-negative guard inside the UPDATE. `getSystemAccount` returns the house account for an external rail. |
+| `transfer-utils.ts` | P2P and ACH transfer orchestration, transfer limits, recipient lookup, and the held-transfer review actions. |
+| `validation.ts` | Zod schemas for every mutating API route, plus the `moneyAmount` schema that turns JSON into a `Decimal`. |
+| `api-utils.ts` | Standard API responses. `serverError(context, error)` logs the real error and returns a generic message, so route handlers never leak internals. |
+| `rate-limit.ts` | In-process fixed-window rate limiter and the named limit presets. |
+| `webhook-events.ts` | Webhook delivery deduplication, claimed against a unique `(provider, eventId)` index. |
+| `plaid-webhook-verification.ts` | Verifies Plaid's ES256 `Plaid-Verification` JWT and binds it to the request body hash. |
+| `provisioning.ts` | Idempotent creation of a `User` and their checking `Account` after sign-in. |
+| `admin.ts` | Resolves the signed-in admin, or null. Every admin surface goes through it. |
+| `kyc-utils.ts` | KYC gating helpers. |
+| `prisma.ts`, `plaid.ts`, `stripe.ts` | Provider and database singletons. |
+| `plaid-utils.ts`, `stripe-issuing-utils.ts` | Thin typed wrappers over the provider SDKs. |
+| `utils.ts` | `cn` class merging and small formatting helpers. |
+| `supabase.ts`, `supabase-server.ts` | The two Supabase clients, explained below. |
+
+## Supabase Client Files
 
 This directory contains TWO Supabase client files - **both are necessary** and serve different purposes.
 

@@ -53,25 +53,32 @@ export default function RegisterPage() {
         // Check if email confirmation is required
         if (data.user.identities?.length === 0) {
           setError("An account with this email already exists")
-        } else {
-          // Create user and internal account
-          try {
-            const onboardResponse = await fetch("/api/auth/onboard", {
-              method: "POST",
-            })
+        } else if (data.session) {
+          // Email confirmation is turned off on this project, so signUp handed
+          // back a session directly and this user will never pass through
+          // /auth/callback. It is the one signup path where the browser has to
+          // ask for provisioning - and now that there is a session, it works.
+          const response = await fetch("/api/auth/onboard", { method: "POST" })
 
-            if (!onboardResponse.ok) {
-              console.error("Failed to onboard user")
-            }
-          } catch (err) {
-            console.error("Error during onboarding:", err)
+          if (!response.ok) {
+            throw new Error(
+              "We could not finish setting up your account. Please try signing in."
+            )
           }
 
+          router.push("/dashboard")
+          router.refresh()
+        } else {
+          // The Postgres user and their checking account get provisioned in
+          // /auth/callback once the confirmation link creates a session. There
+          // is no session yet at this point, so there is nothing to call here.
           router.push("/login?message=Check your email to confirm your account")
         }
       }
-    } catch (err: any) {
-      setError(err.message || "An error occurred during sign up")
+    } catch (err) {
+      setError(
+        err instanceof Error ? err.message : "An error occurred during sign up"
+      )
     } finally {
       setLoading(false)
     }

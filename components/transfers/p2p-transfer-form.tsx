@@ -5,21 +5,19 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Button } from '@/components/ui/button'
 import { Search, DollarSign, AlertCircle, CheckCircle } from 'lucide-react'
+import type { PublicRecipient } from '@/types/account'
 
-interface RecipientInfo {
-  id: string
-  email: string
-  firstName: string
-  lastName: string
-  accountId: string
-  accountNumber: string
-  accountStatus: string
-}
 
 interface P2PTransferFormProps {
   availableBalance: number
+  /**
+   * Prefills the recipient, e.g. from the recent-recipients list. Read once, at
+   * mount: the parent keys the form on the recipient so picking a different one
+   * remounts with a clean amount and description instead of half-editing state.
+   */
+  initialRecipient?: PublicRecipient | null
   onTransferInitiated: (transferData: {
-    recipient: RecipientInfo
+    recipient: PublicRecipient
     amount: number
     description?: string
   }) => void
@@ -28,13 +26,16 @@ interface P2PTransferFormProps {
 
 export function P2PTransferForm({
   availableBalance,
+  initialRecipient,
   onTransferInitiated,
   onCancel,
 }: P2PTransferFormProps) {
-  const [recipientQuery, setRecipientQuery] = useState('')
-  const [searchResults, setSearchResults] = useState<RecipientInfo[]>([])
+  const [recipientQuery, setRecipientQuery] = useState(
+    initialRecipient?.identifier ?? ''
+  )
+  const [searchResults, setSearchResults] = useState<PublicRecipient[]>([])
   const [selectedRecipient, setSelectedRecipient] =
-    useState<RecipientInfo | null>(null)
+    useState<PublicRecipient | null>(initialRecipient ?? null)
   const [amount, setAmount] = useState('')
   const [description, setDescription] = useState('')
   const [searching, setSearching] = useState(false)
@@ -66,8 +67,10 @@ export function P2PTransferForm({
         if (data.message) {
           setError(data.message)
         }
-      } catch (err: any) {
-        setError(err.message)
+      } catch (err) {
+        setError(
+          err instanceof Error ? err.message : 'Failed to search recipients'
+        )
         setSearchResults([])
       } finally {
         setSearching(false)
@@ -78,9 +81,9 @@ export function P2PTransferForm({
     return () => clearTimeout(timeoutId)
   }, [recipientQuery, selectedRecipient])
 
-  const handleRecipientSelect = (recipient: RecipientInfo) => {
+  const handleRecipientSelect = (recipient: PublicRecipient) => {
     setSelectedRecipient(recipient)
-    setRecipientQuery(recipient.email)
+    setRecipientQuery(recipient.identifier)
     setSearchResults([])
     setError(null)
   }
@@ -164,16 +167,16 @@ export function P2PTransferForm({
           <div className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-lg shadow-lg overflow-hidden">
             {searchResults.map((recipient) => (
               <button
-                key={recipient.id}
+                key={recipient.identifier}
                 type="button"
                 onClick={() => handleRecipientSelect(recipient)}
                 className="w-full px-4 py-3 text-left hover:bg-zinc-50 dark:hover:bg-zinc-800 transition-colors border-b border-zinc-100 dark:border-zinc-800 last:border-b-0"
               >
                 <div className="font-medium text-zinc-900 dark:text-white">
-                  {recipient.firstName} {recipient.lastName}
+                  {recipient.displayName}
                 </div>
                 <div className="text-sm text-zinc-500 dark:text-zinc-400">
-                  {recipient.email} • {recipient.accountNumber}
+                  {recipient.maskedAccountNumber}
                 </div>
               </button>
             ))}
@@ -186,10 +189,10 @@ export function P2PTransferForm({
             <CheckCircle className="h-4 w-4 text-green-600 dark:text-green-400 flex-shrink-0" />
             <div className="flex-1">
               <div className="text-sm font-medium text-green-900 dark:text-green-100">
-                {selectedRecipient.firstName} {selectedRecipient.lastName}
+                {selectedRecipient.displayName}
               </div>
               <div className="text-xs text-green-700 dark:text-green-300">
-                {selectedRecipient.email}
+                {selectedRecipient.maskedAccountNumber}
               </div>
             </div>
           </div>

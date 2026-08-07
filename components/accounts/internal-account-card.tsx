@@ -183,7 +183,7 @@ export function InternalAccountCard({ account, kycStatus = "PENDING" }: Internal
                 toast.error("KYC verification required")
                 router.push("/kyc")
               } else {
-                toast.info("Coming soon")
+                router.push("/ach")
               }
             }}
           >
@@ -199,7 +199,7 @@ export function InternalAccountCard({ account, kycStatus = "PENDING" }: Internal
                 toast.error("KYC verification required")
                 router.push("/kyc")
               } else {
-                toast.info("Coming soon")
+                router.push("/cards")
               }
             }}
           >
@@ -217,7 +217,7 @@ export function InternalAccountCard({ account, kycStatus = "PENDING" }: Internal
         )}
         {isVerified && (
           <p className="text-xs text-center text-zinc-500 dark:text-zinc-400">
-            Coming soon: Add money and virtual cards
+            ACH runs against the Plaid sandbox and cards are issued in Stripe test mode
           </p>
         )}
       </div>

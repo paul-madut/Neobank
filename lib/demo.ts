@@ -497,3 +497,15 @@ export async function cleanupExpiredDemoAccounts(limit = 25): Promise<string[]> 
 
   return removed
 }
+
+/**
+ * What to show a visitor in place of their address.
+ *
+ * Demo accounts are provisioned with a throwaway address of the form
+ * `demo-<uuid>@demo.neobank.invalid`, which is correct for uniqueness and
+ * useless to look at: the first thing on the dashboard would otherwise be a
+ * raw UUID. Real accounts still show the real address.
+ */
+export function displayAccountName(email: string): string {
+  return email.endsWith(`@${DEMO_EMAIL_DOMAIN}`) ? 'Demo account' : email
+}

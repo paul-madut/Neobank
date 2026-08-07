@@ -1,7 +1,6 @@
 import { AnimatedGridPattern } from "@/components/magicui/animated-grid-pattern";
 import { Meteors } from "@/components/magicui/meteors";
 import { DemoLoginButton } from "@/components/demo/demo-login-button";
-import { Cover } from "@/components/magicui/cover";
 import { FloatingNavbar } from "@/components/navbar/floating-navbar";
 import { ArrowRight, CreditCard, FlaskConical, Lock, Smartphone, TrendingUp } from "lucide-react";
 import Link from "next/link";
@@ -33,11 +32,9 @@ export default function Home() {
           <h1 className="mb-6 text-5xl font-bold tracking-tight text-white sm:text-7xl">
             Banking for the
             <br />
-            <Cover className="mt-2">
-              <span className="bg-gradient-to-r from-purple-400 via-pink-400 to-purple-400 bg-clip-text text-transparent">
-                Digital Age
-              </span>
-            </Cover>
+            <span className="mt-2 inline-block bg-gradient-to-r from-purple-400 via-pink-400 to-purple-400 bg-clip-text text-transparent">
+              Digital Age
+            </span>
           </h1>
 
           <p className="mx-auto mb-10 max-w-2xl text-lg text-slate-400 sm:text-xl">

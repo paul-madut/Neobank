@@ -9,6 +9,7 @@ import { Button } from "@/components/ui/button"
 import { ArrowRight } from "lucide-react"
 import Link from "next/link"
 import type { InternalAccount } from "@/types/account"
+import { displayAccountName } from "@/lib/demo"
 
 export interface MonthlyStats {
   transactionCount: number
@@ -58,7 +59,7 @@ export function DashboardClient({
                 Dashboard
               </h1>
               <p className="text-zinc-600 dark:text-zinc-400">
-                Welcome back, {userEmail}
+                Welcome back, {displayAccountName(userEmail)}
               </p>
             </div>
 
@@ -120,14 +121,6 @@ export function DashboardClient({
                         <ArrowRight className="w-4 h-4" />
                       </Button>
                     </Link>
-                    <Button
-                      variant="outline"
-                      className="w-full justify-between"
-                      disabled
-                    >
-                      Settings
-                      <ArrowRight className="w-4 h-4" />
-                    </Button>
                   </div>
                 </div>
 

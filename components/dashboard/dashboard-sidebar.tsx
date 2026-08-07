@@ -22,6 +22,7 @@ import {
   Wallet,
 } from "lucide-react"
 import { cn } from "@/lib/utils"
+import { displayAccountName } from "@/lib/demo"
 
 interface DashboardSidebarProps {
   userEmail: string
@@ -120,7 +121,7 @@ export function DashboardSidebar({ userEmail, kycStatus }: DashboardSidebarProps
         <div>
           <SidebarLink
             link={{
-              label: userEmail,
+              label: displayAccountName(userEmail),
               href: "#",
               icon: (
                 <div className="h-7 w-7 flex-shrink-0 rounded-full bg-gradient-to-r from-purple-500 to-pink-500 flex items-center justify-center text-white text-sm font-bold">

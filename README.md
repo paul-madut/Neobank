@@ -46,24 +46,14 @@ Under all of it is one invariant: the sum of every account balance in the system
 
 ## Screenshots
 
-<!-- TODO: capture these five and drop them in docs/screenshots/ -->
+Taken from a fresh account on the live demo.
 
 | | |
 |---|---|
-| ![Dashboard](docs/screenshots/dashboard.png) | ![P2P transfer](docs/screenshots/transfer.png) |
-| ![Transaction detail with ledger entries](docs/screenshots/ledger.png) | ![Virtual card](docs/screenshots/card.png) |
-
-![Admin review queue](docs/screenshots/admin-review.png)
-
-Capture exactly these, in this state:
-
-1. **Dashboard** with a non-round balance and at least six transactions of mixed type, so it does not look seeded with placeholder data.
-   Demo banner visible.
-2. **P2P transfer** at the confirmation step, showing the recipient masked as `Name L.` and `••••1234` rather than a full name and account number.
-3. **Transaction detail** expanded to show both ledger entries, the debit and the credit, with their `balanceAfter` values.
-   This is the screenshot that proves the double-entry claim at a glance, so it matters most.
-4. **Virtual card** page with a card issued and the freeze control visible.
-5. **Admin review queue** with one transfer held above the review threshold, before approval.
+| ![Dashboard with balance, account details and recent activity](docs/screenshots/dashboard.png) | ![P2P transfer confirmation with the recipient masked](docs/screenshots/transfer.png) |
+| **Dashboard.** The demo account, seeded with a balance and a month of history. | **Sending money.** The recipient is shown as `Maya O.` and `••••8586`, never a full name or account number. |
+| ![Transaction detail showing the debit and credit ledger entries](docs/screenshots/ledger.png) | ![Virtual card with freeze, limit and cancel controls](docs/screenshots/card.png) |
+| **The books.** One transfer, two ledger entries: a debit and a matching credit, each with the balance after it. | **Virtual card.** Issued through Stripe Issuing in test mode. |
 
 ---
 
